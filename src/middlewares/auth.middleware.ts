@@ -45,3 +45,44 @@ export const verifyTokenMiddleware = async (
     });
   }
 };
+
+export enum UserRole {
+  ADMIN = 'ADMIN',
+  CLIENT = 'CLIENT'
+}
+
+export const checkRole = (allowedRoles: UserRole[]) => {
+  return async (req: Request, res: Response, next: NextFunction): Promise<void> => {
+    try {
+      const user = req.context.getUser();
+      
+      if (!user || !user.role) {
+        res.status(403).json({
+          success: false,
+          message: "Access denied - Role not found",
+        });
+        return;
+      }
+
+      if (!allowedRoles.includes(user.role as UserRole)) {
+        res.status(403).json({
+          success: false,
+          message: "Access denied - Insufficient permissions",
+        });
+        return;
+      }
+
+      next();
+    } catch (error) {
+      res.status(403).json({
+        success: false,
+        message: "Access denied",
+        error: error instanceof Error ? error.message : "Unknown error",
+      });
+    }
+  };
+};
+
+export const isAdmin = checkRole([UserRole.ADMIN]);
+export const isClient = checkRole([UserRole.CLIENT]);
+export const isAdminOrClient = checkRole([UserRole.ADMIN, UserRole.CLIENT]);

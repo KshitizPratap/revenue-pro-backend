@@ -25,6 +25,7 @@ export enum ErrorCode {
   DATABASE_ERROR = "DATABASE_ERROR",
   AUTHENTICATION_ERROR = "AUTHENTICATION_ERROR",
   FORBIDDEN = "FORBIDDEN",
+  CONFLICT = "CONFLICT",
 }
 
 export const ErrorCodeStatusMap: Record<ErrorCode, number> = {
@@ -38,4 +39,5 @@ export const ErrorCodeStatusMap: Record<ErrorCode, number> = {
   [ErrorCode.DATABASE_ERROR]: 500,
   [ErrorCode.AUTHENTICATION_ERROR]: 401,
   [ErrorCode.FORBIDDEN]: 403,
+  [ErrorCode.CONFLICT]: 409,
 };

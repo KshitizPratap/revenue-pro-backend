@@ -67,4 +67,36 @@ export class UserRepositoryService {
       throw utils.ThrowableError(error);
     }
   }
+
+  async getAllUsers(): Promise<IUser[]> {
+    try {
+      return await User.find({});
+    } catch (error) {
+      throw utils.ThrowableError(error);
+    }
+  }
+
+  async updateUser(userId: string, updateData: {
+    name?: string;
+    email?: string;
+    imageURL?: string;
+    role?: string;
+    isEmailVerified?: boolean;
+  }): Promise<IUser | null> {
+    try {
+      if (!userId) {
+        throw new CustomError(ErrorCode.INVALID_INPUT, "User ID is required");
+      }
+      
+      const user = await User.findByIdAndUpdate(
+        userId,
+        { $set: updateData },
+        { new: true }
+      );
+
+      return user;
+    } catch (error) {
+      throw utils.ThrowableError(error);
+    }
+  }
 }

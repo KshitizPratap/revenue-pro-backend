@@ -3,6 +3,8 @@ import authRouter from "./auth.routes.js"
 import weeklyActualRouter from "./weeklyActual.routes.js"
 import reportRouter from "./report.routes.js"
 import targetRouter from "./target.routes.js"
+import adminRouter from "./admin.routes.js"
+import userRoutes from "./user.routes.js"
 
 import {
   addContext,
@@ -29,6 +31,16 @@ const authenticatedRoutes: Route[] = [
   {
     path: "/api/v1/target",
     router: targetRouter,
+    middlewares: [],
+  },
+  {
+    path: "/api/v1/admin",
+    router: adminRouter,
+    middlewares: [],
+  },
+  {
+    path: "/api/v1/users",
+    router: userRoutes,
     middlewares: [],
   }
 ];

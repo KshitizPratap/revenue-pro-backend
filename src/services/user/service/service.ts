@@ -71,4 +71,65 @@ export default class UserService {
       throw utils.ThrowableError(error);
     }
   }
+
+  async getAllUsers(): Promise<IUser[]> {
+    try {
+      return await this.repository.getAllUsers();
+    } catch (error) {
+      throw utils.ThrowableError(error);
+    }
+  }
+
+  async updateUserDetails(userId: string, updateData: {
+    name: string;
+    email: string;
+    role: string;
+    isEmailVerified: boolean;
+  }): Promise<IUser> {
+    const updatedUser = await this.repository.updateUser(userId, updateData);
+
+    if (!updatedUser) {
+      throw new CustomError(ErrorCode.NOT_FOUND, "User not found");
+    }
+
+    return updatedUser;
+  }
+
+  async upsertUser(userData: {
+    userId?: string;
+    email: string;
+    password?: string;
+    name: string;
+    role: string;
+    isEmailVerified: boolean;
+  }): Promise<IUser> {
+    try {
+      const { userId, email, password, name, role, isEmailVerified } = userData;
+
+      // If userId is provided, update the user
+      if (userId) {
+        return await this.updateUserDetails(userId, { name, email, role, isEmailVerified });
+      }
+
+      // If no userId is provided, create a new user
+      if (!password) {
+        throw new CustomError(
+          ErrorCode.INVALID_INPUT,
+          "Password is required for new users"
+        );
+      }
+
+      return await this.addUser(
+        name,
+        email,
+        email, // using email as username
+        password,
+        role,
+        null, // no googleID for manually created users
+        isEmailVerified
+      );
+    } catch (error) {
+      throw utils.ThrowableError(error);
+    }
+  }
 }
