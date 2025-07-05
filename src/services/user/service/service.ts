@@ -72,9 +72,9 @@ export default class UserService {
     }
   }
 
-  async getAllUsers(): Promise<IUser[]> {
+  async getAllUsers(role: string): Promise<IUser[]> {
     try {
-      return await this.repository.getAllUsers();
+      return await this.repository.getAllUsers(role);
     } catch (error) {
       throw utils.ThrowableError(error);
     }

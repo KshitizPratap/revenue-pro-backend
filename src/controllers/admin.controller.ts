@@ -59,29 +59,33 @@ class AdminController {
     }
   };
 
+  private formatUser(user: IUser): object {
+    return {
+      id: user._id,
+      email: user.email,
+      name: user.name,
+      role: user.role,
+      isEmailVerified: user.isEmailVerified,
+      created_at: user.created_at,
+    };
+  }
+
   public getAllUsers = async (req: Request, res: Response): Promise<void> => {
     try {
-      const users = await this.userService.getAllUsers();
-
+      const role = (req.query?.role ?? "") as string;
+      const users = await this.userService.getAllUsers(role);
       res.status(200).json({
         success: true,
-        data: users.map((user: IUser) => ({
-          id: user._id,
-          email: user.email,
-          name: user.name,
-          role: user.role,
-          isEmailVerified: user.isEmailVerified,
-          created_at: user.created_at,
-        })),
+        data: users.map(this.formatUser),
       });
     } catch (error) {
       res.status(500).json({
         success: false,
-        message: "Error fetching users",
-        error: error instanceof Error ? error.message : "Unknown error",
+        message: "Failed to fetch users.",
+        error: error instanceof Error ? error.message : String(error),
       });
     }
   };
 }
 
-export default new AdminController(); 
+export default new AdminController();

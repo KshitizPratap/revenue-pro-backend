@@ -29,7 +29,7 @@ const authenticatedRoutes: Route[] = [
     middlewares: [],
   },
   {
-    path: "/api/v1/target",
+    path: "/api/v1/targets",
     router: targetRouter,
     middlewares: [],
   },

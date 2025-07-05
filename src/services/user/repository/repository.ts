@@ -68,9 +68,10 @@ export class UserRepositoryService {
     }
   }
 
-  async getAllUsers(): Promise<IUser[]> {
+  async getAllUsers(role?: string): Promise<IUser[]> {
     try {
-      return await User.find({});
+      const query = role ? { role } : {};
+      return await User.find(query);
     } catch (error) {
       throw utils.ThrowableError(error);
     }

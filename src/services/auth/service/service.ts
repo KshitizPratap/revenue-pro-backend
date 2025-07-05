@@ -73,7 +73,7 @@ class AuthService {
     }
   }
 
-  async login(context: Context, req: Request): Promise<any | CustomError> {
+  async login( req: Request): Promise<any | CustomError> {
     try {
       const { email, password } = req.body;
 

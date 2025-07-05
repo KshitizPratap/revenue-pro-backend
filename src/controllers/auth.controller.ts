@@ -22,8 +22,8 @@ class AuthController {
 
   public login = async (req: Request, res: Response): Promise<void> => {
     try {
-      const resp = await this.authService.login(req.context, req);
-      utils.sendSuccessResponse(res, 200, { user: resp.user });
+      const resp = await this.authService.login(req);
+      utils.sendSuccessResponse(res, 200, { user: resp.user, token:resp.token });
     } catch (error) {
       utils.sendErrorResponse(res, error);
     }
