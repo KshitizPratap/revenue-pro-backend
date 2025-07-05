@@ -1,9 +1,13 @@
 import { Router } from 'express';
-import { TargetController } from '@/controllers/targetController.js';
+import { TargetController } from '../controllers/targetController.js';
 
 const router = Router();
-const targetController = new TargetController();
+const controller = new TargetController();
 
-router.post("/:year", targetController.update);
+// Create or update target
+router.post('/upsert', controller.upsertTarget);
+
+// Get targets by period (weekly/monthly/yearly)
+router.get('/get', controller.getTargets);
 
 export default router;
