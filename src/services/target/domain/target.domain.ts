@@ -34,7 +34,7 @@ export interface IWeeklyTarget {
 }
 
 export interface ITargetQuery {
-  userId?: string;
+  userId: string;
   startDate: Date;
-  type: 'weekly' | 'monthly' | 'yearly';
+  endDate: Date;
 }

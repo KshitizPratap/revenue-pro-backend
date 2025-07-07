@@ -37,11 +37,7 @@ export class TargetService {
 
   public async getWeeklyTarget(userId: string, date: Date): Promise<IWeeklyTargetDocument> {
     const weekInfo = DateUtils.getWeekInfo(date);
-    const targets = await this.targetRepository.getTargets({
-      userId,
-      startDate: weekInfo.startDate,
-      type: 'weekly'
-    });
+    const targets = await this.targetRepository.getTargets({ userId, startDate: weekInfo.startDate, endDate: weekInfo.endDate });
     const target = targets[0];
     if (!target) {
       // Return an object with 0 values if no target is found
@@ -64,43 +60,23 @@ export class TargetService {
     return target;
   }
 
-  public async getMonthlyTargets(userId: string, date: Date): Promise<IWeeklyTargetDocument[]> {
-    const year = date.getFullYear();
-    const month = date.getMonth() + 1; // Convert to 1-based month
-    
-    // Get the first and last day of the month
-    const { startDate: monthStart, endDate: monthEnd } = DateUtils.getMonthStartEnd(year, month);
-    
-    // Get the week that contains the first day of the month
-    const firstWeekInfo = DateUtils.getWeekInfo(monthStart);
-    // Get the week that contains the last day of the month
-    const lastWeekInfo = DateUtils.getWeekInfo(monthEnd);
-
+  public async getMonthlyTargets(userId: string, year: number, month: number): Promise<IWeeklyTargetDocument[]> {
+    const weeksInMonth = DateUtils.getWeeksInMonth(year, month);
+    if (weeksInMonth.length === 0) {
+      return [];
+    }
+    const firstWeekStartDate = weeksInMonth[0].startDate;
+    const lastWeekEndDate = weeksInMonth[weeksInMonth.length - 1].endDate;
     return this.targetRepository.getTargetsByDateRange(
-      firstWeekInfo.startDate,
-      lastWeekInfo.endDate,
+      firstWeekStartDate,
+      lastWeekEndDate,
       userId
     );
   }
 
-  public async getWeeklyTargetsByDateRange(userId: string, startDate: Date, endDate: Date): Promise<IWeeklyTargetDocument[]> {
-    // Adjust dates to week boundaries
-    const startWeekInfo = DateUtils.getWeekInfo(startDate);
-    const endWeekInfo = DateUtils.getWeekInfo(endDate);
-    
-    return this.targetRepository.getTargets({
-      userId,
-      startDate: startWeekInfo.startDate,
-      type: 'weekly'
-    });
-  }
-
   public async getWeeklyTargetsByYear(userId: string, year: number): Promise<IWeeklyTargetDocument[]> {
     const startDate = new Date(year, 0, 1);
-    return this.targetRepository.getTargets({
-      userId,
-      startDate,
-      type: 'yearly'
-    });
+    const endDate = new Date(year, 11, 31);
+    return this.targetRepository.getTargetsByDateRange(startDate, endDate, userId);
   }
 }

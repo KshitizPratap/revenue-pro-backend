@@ -18,27 +18,12 @@ export class TargetRepository {
   }
 
   async getTargets(query: ITargetQuery): Promise<IWeeklyTargetDocument[]> {
-    let endDate: Date;
-    const startDate = new Date(query.startDate);
-    
-    switch (query.type) {
-      case 'weekly':
-        endDate = new Date(startDate);
-        endDate.setDate(startDate.getDate() + 6);
-        break;
-      
-      case 'monthly':
-        endDate = new Date(startDate.getFullYear(), startDate.getMonth() + 1, 0);
-        break;
-      
-      case 'yearly':
-        endDate = new Date(startDate.getFullYear(), 11, 31);
-        break;
-    }
+    const startDate = query.startDate;
+    const endDate = query.endDate;
 
     return this.model.find({
       userId: query.userId,
-      startDate: { 
+      startDate: {
         $gte: startDate,
         $lte: endDate
       }
