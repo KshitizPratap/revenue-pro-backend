@@ -15,12 +15,17 @@ export default class UserService {
     email: string,
     username: string,
     password: string | null,
-    role: string = "",
+    role: string = "USER",
     googleID: string | null,
     isEmailVerified: boolean,
     imageURL?: string,
   ): Promise<IUser> {
     try {
+
+      const existingUser = await this.getUserByEmail(email);
+      if (existingUser) {
+        throw new CustomError(ErrorCode.CONFLICT, "User with this email already exists");
+      }
       return await this.repository.addUser(
         name,
         email,
@@ -131,5 +136,9 @@ export default class UserService {
     } catch (error) {
       throw utils.ThrowableError(error);
     }
+  }
+
+  async deleteUser(userId: string): Promise<void> {
+    await this.repository.deleteUser(userId);
   }
 }

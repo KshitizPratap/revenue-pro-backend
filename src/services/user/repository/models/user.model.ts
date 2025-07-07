@@ -13,7 +13,6 @@ const userSchema = new Schema<IUser, IUserModel>(
     email: {
       type: String,
       required: true,
-      unique: true,
     },
     password: String,
     imageURL: String,

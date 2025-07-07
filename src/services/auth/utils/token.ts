@@ -122,7 +122,7 @@ export const verifyToken = async (
               });
             }
 
-            if (!user.role || user.role !== "USER") {
+            if (!user.role) {
               throw new CustomError(ErrorCode.FORBIDDEN, {
                 message: "Insufficient permissions",
                 status: 403

@@ -100,4 +100,17 @@ export class UserRepositoryService {
       throw utils.ThrowableError(error);
     }
   }
+
+  async findUserByEmail(email: string): Promise<IUser | null> {
+    try {
+      const user = await User.findOne({ email });
+      return user;
+    } catch (error) {
+      throw utils.ThrowableError(error);
+    }
+  }
+
+  public async deleteUser(userId: string): Promise<void> {
+    await User.findByIdAndDelete(userId);
+  }
 }

@@ -13,7 +13,7 @@ class AdminController {
 
   public upsertUser = async (req: Request, res: Response): Promise<void> => {
     try {
-      const { email, password, name, role = UserRole.CLIENT, userId } = req.body;
+      const { email, password, name, role = UserRole.USER, userId } = req.body;
 
       if (!email || !name) {
         utils.sendErrorResponse(res, "Email and name are required");
@@ -68,6 +68,51 @@ class AdminController {
       utils.sendSuccessResponse(res, 200, {
         success: true,
         data: users.map(this.formatUser),
+      });
+    } catch (error) {
+      utils.sendErrorResponse(res, error);
+    }
+  };
+
+  public getUserById = async (req: Request, res: Response): Promise<void> => {
+    try {
+      const { userId } = req.params;
+
+      if (!userId) {
+        utils.sendErrorResponse(res, "User ID is required");
+        return;
+      }
+
+      const user = await this.userService.getUserById(userId);
+
+      if (!user) {
+        utils.sendErrorResponse(res, "User not found");
+        return;
+      }
+
+      utils.sendSuccessResponse(res, 200, {
+        success: true,
+        data: this.formatUser(user),
+      });
+    } catch (error) {
+      utils.sendErrorResponse(res, error);
+    }
+  };
+
+  public deleteUser = async (req: Request, res: Response): Promise<void> => {
+    try {
+      const { userId } = req.params;
+
+      if (!userId) {
+        utils.sendErrorResponse(res, "User ID is required");
+        return;
+      }
+
+      await this.userService.deleteUser(userId);
+
+      utils.sendSuccessResponse(res, 200, {
+        success: true,
+        message: "User deleted successfully",
       });
     } catch (error) {
       utils.sendErrorResponse(res, error);

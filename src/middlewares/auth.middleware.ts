@@ -49,7 +49,7 @@ export const verifyTokenMiddleware = async (
 
 export enum UserRole {
   ADMIN = 'ADMIN',
-  CLIENT = 'CLIENT'
+  USER = 'USER'
 }
 
 export const checkRole = (allowedRoles: UserRole[]) => {
@@ -85,5 +85,5 @@ export const checkRole = (allowedRoles: UserRole[]) => {
 };
 
 export const isAdmin = checkRole([UserRole.ADMIN]);
-export const isClient = checkRole([UserRole.CLIENT]);
-export const isAdminOrClient = checkRole([UserRole.ADMIN, UserRole.CLIENT]);
+export const isUser = checkRole([UserRole.USER]);
+export const isAdminOrUser = checkRole([UserRole.ADMIN, UserRole.USER]);

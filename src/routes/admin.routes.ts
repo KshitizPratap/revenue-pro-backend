@@ -7,5 +7,7 @@ const router = Router();
 // Admin user management routes
 router.post("/users/upsert",  isAdmin, adminController.upsertUser);
 router.get("/users/list/all", isAdmin, adminController.getAllUsers);
+router.get("/get/users/:userId", isAdmin, adminController.getUserById);
+router.delete("/users/:userId", isAdmin, adminController.deleteUser);
 
 export default router; 
