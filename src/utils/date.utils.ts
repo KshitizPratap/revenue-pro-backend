@@ -68,4 +68,24 @@ export class DateUtils {
     }
     return result;
   }
+
+  static getWeeksInYear(year: number): IWeekInfo[] {
+    const firstDayOfYear = new Date(year, 0, 1);
+    const lastDayOfYear = new Date(year, 11, 31);
+
+    const weeks = eachWeekOfInterval(
+      {
+        start: startOfWeek(firstDayOfYear, { weekStartsOn: 1 }),
+        end: endOfWeek(lastDayOfYear, { weekStartsOn: 1 }),
+      },
+      { weekStartsOn: 1 }
+    );
+
+    const result: IWeekInfo[] = [];
+    for (const weekStart of weeks) {
+      result.push(DateUtils.getWeekInfo(weekStart));
+    }
+
+    return result;
+  }
 } 

@@ -9,11 +9,15 @@ export class TargetRepository {
     this.model = WeeklyTarget;
   }
 
-  async upsertTarget(targetData: IWeeklyTarget): Promise<IWeeklyTargetDocument> {
+  async createTarget(targetData: IWeeklyTarget): Promise<IWeeklyTargetDocument> {
+    return this.model.create(targetData);
+  }
+
+  async updateTarget(targetData: IWeeklyTarget): Promise<IWeeklyTargetDocument | null> {
     return this.model.findOneAndUpdate(
       { userId: targetData.userId, startDate: targetData.startDate },
       targetData,
-      { new: true, upsert: true }
+      { new: true }
     );
   }
 
@@ -38,5 +42,9 @@ export class TargetRepository {
         $lte: endDate
       }
     }).sort({ startDate: 1 });
+  }
+
+  async findTargetByStartDate(userId: string, startDate: Date): Promise<IWeeklyTargetDocument | null> {
+    return this.model.findOne({ userId, startDate });
   }
 } 

@@ -21,6 +21,8 @@ export interface IWeeklyTarget {
   userId: string;
   startDate: Date;
   endDate: Date;
+  year: number;
+  weekNumber: number;
   leads: number;
   revenue: number;
   avgJobSize: number;

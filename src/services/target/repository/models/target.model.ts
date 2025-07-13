@@ -7,6 +7,8 @@ const weeklyTargetSchema = new Schema<IWeeklyTargetDocument>({
   userId: { type: String, required: true },
   startDate: { type: Date, required: true },
   endDate: { type: Date, required: true },
+  year: { type: Number, required: true },
+  weekNumber: { type: Number, required: true },
   leads: { type: Number, default: 0 },
   revenue: { type: Number, default: 0 },
   avgJobSize: { type: Number, default: 0 },
@@ -20,6 +22,6 @@ const weeklyTargetSchema = new Schema<IWeeklyTargetDocument>({
 }, { timestamps: true });
 
 // Index on startDate for efficient queries
-weeklyTargetSchema.index({ userId: 1, startDate: 1 }, { unique: true });
+weeklyTargetSchema.index({ userId: 1, year: 1, weekNumber: 1 }, { unique: true });
 
 export default model<IWeeklyTargetDocument>('WeeklyTarget', weeklyTargetSchema);
