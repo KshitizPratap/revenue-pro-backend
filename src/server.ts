@@ -5,7 +5,6 @@ import cors from "cors";
 import { connectDB } from "./pkg/mongodb/connection.js";
 import configureRoutes from "./routes/routes.js";
 import { config } from "./config.js";
-import di from "./di/di.js";
 import logger, {
   requestIdMiddleware,
   requestLoggerMiddleware,
