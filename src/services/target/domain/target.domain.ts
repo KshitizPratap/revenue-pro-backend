@@ -19,8 +19,8 @@ export interface IMonthlyTarget {
 
 export interface IWeeklyTarget {
   userId: string;
-  startDate: Date;
-  endDate: Date;
+  startDate: string;
+  endDate: string;
   year: number;
   weekNumber: number;
   appointmentRate: number;

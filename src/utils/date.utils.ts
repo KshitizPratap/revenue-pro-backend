@@ -2,12 +2,11 @@ import {
   startOfWeek,
   endOfWeek,
   getISOWeek,
-  parseISO,
-  isSameMonth,
   startOfMonth,
   endOfMonth,
   eachWeekOfInterval,
-  getDay,
+  isSameMonth,
+  addDays,
 } from "date-fns";
 
 export interface IWeekInfo {
@@ -17,75 +16,86 @@ export interface IWeekInfo {
   endDate: Date;
 }
 
-export class DateUtils {
-  /**
-   * Gets the week information for a given date
-   * Week starts from Monday and ends on Sunday
-   */
-  static getWeekInfo(date: Date): IWeekInfo {
-    const start = startOfWeek(date, { weekStartsOn: 1 }); // Monday
-    const end = endOfWeek(date, { weekStartsOn: 1 }); // Sunday
+type WeekRange = {
+  year: number;
+  weekNumber: number;
+  weekStart: string;
+  weekEnd: string;
+};
 
+
+export class DateUtils {
+  static getWeekDetails(dateStr: string): WeekRange {
+    const inputDate = new Date(dateStr);
+  
+    // Move to Monday of that week
+    const monday = new Date(inputDate);
+    const day = inputDate.getDay(); // 0 = Sunday, 1 = Monday, ..., 6 = Saturday
+    const diffToMonday = (day + 6) % 7;
+    monday.setDate(inputDate.getDate() - diffToMonday);
+  
+    // Calculate week start and end
+    const weekStart = new Date(monday);
+    const weekEnd = new Date(monday);
+    weekEnd.setDate(weekStart.getDate() + 6);
+  
     return {
-      year: start.getFullYear(),
-      weekNumber: getISOWeek(start),
-      startDate: start,
-      endDate: end,
+      year: weekStart.getFullYear(),
+      weekNumber: this.getISOWeekNumber(weekStart),
+      weekStart: weekStart.toISOString().split("T")[0],
+      weekEnd: weekEnd.toISOString().split("T")[0]
     };
   }
 
-  /**
-   * Gets the weeks that belong to a given month based on the majority-day rule.
-   * A week belongs to the month that contains the majority of its days (4 or more).
-   */
-  static getWeeksInMonth(year: number, month: number): IWeekInfo[] {
-    const firstDayOfMonth = startOfMonth(new Date(year, month - 1, 1));
-    const lastDayOfMonth = endOfMonth(firstDayOfMonth);
-
-    const weeks = eachWeekOfInterval(
-      {
-        start: startOfWeek(firstDayOfMonth, { weekStartsOn: 1 }),
-        end: endOfWeek(lastDayOfMonth, { weekStartsOn: 1 }),
-      },
-      { weekStartsOn: 1 }
-    );
-
-    const result: IWeekInfo[] = [];
-    for (const weekStart of weeks) {
-      const weekEnd = endOfWeek(weekStart, { weekStartsOn: 1 });
-      let daysInMonth = 0;
+  static getISOWeekNumber(date: Date): number {
+    const temp = new Date(Date.UTC(date.getFullYear(), date.getMonth(), date.getDate()));
+    const day = temp.getUTCDay() || 7; // Make Sunday (0) become 7
+    temp.setUTCDate(temp.getUTCDate() + 4 - day); // nearest Thursday
+    const yearStart = new Date(Date.UTC(temp.getUTCFullYear(), 0, 1));
+    const weekNo = Math.ceil((((+temp - +yearStart) / 86400000) + 1) / 7);
+    return weekNo;
+  }
+  
+  static getMonthWeeks(startDateStr: string, endDateStr: string): WeekRange[] {
+    const startDate = new Date(startDateStr);
+    const endDate = new Date(endDateStr);
+  
+    const targetMonth = startDate.getMonth() + 1; // 1-12
+  
+    const current = new Date(startDate);
+    current.setDate(current.getDate() - ((current.getDay() + 6) % 7)); // move to Monday
+  
+    const result: WeekRange[] = [];
+  
+    while (current <= endDate) {
+      let daysInTargetMonth = 0;
+      const weekDates: Date[] = [];
+  
       for (let i = 0; i < 7; i++) {
-        const day = new Date(weekStart);
-        day.setDate(weekStart.getDate() + i);
-        if (isSameMonth(day, firstDayOfMonth)) {
-          daysInMonth++;
+        const day = new Date(current);
+        day.setDate(current.getDate() + i);
+        weekDates.push(day);
+  
+        if (day.getMonth() + 1 === targetMonth) {
+          daysInTargetMonth++;
         }
       }
-
-      if (daysInMonth >= 4) {
-        result.push(DateUtils.getWeekInfo(weekStart));
+  
+      if (daysInTargetMonth >= 4) {
+        const weekStart = weekDates[0];
+        const weekEnd = weekDates[6];
+  
+        result.push({
+          year: weekStart.getFullYear(),
+          weekNumber: this.getISOWeekNumber(weekStart),
+          weekStart: weekStart.toISOString().split("T")[0],
+          weekEnd: weekEnd.toISOString().split("T")[0]
+        });
       }
+  
+      current.setDate(current.getDate() + 7); // move to next Monday
     }
+  
     return result;
   }
-
-  static getWeeksInYear(year: number): IWeekInfo[] {
-    const firstDayOfYear = new Date(year, 0, 1);
-    const lastDayOfYear = new Date(year, 11, 31);
-
-    const weeks = eachWeekOfInterval(
-      {
-        start: startOfWeek(firstDayOfYear, { weekStartsOn: 1 }),
-        end: endOfWeek(lastDayOfYear, { weekStartsOn: 1 }),
-      },
-      { weekStartsOn: 1 }
-    );
-
-    const result: IWeekInfo[] = [];
-    for (const weekStart of weeks) {
-      result.push(DateUtils.getWeekInfo(weekStart));
-    }
-
-    return result;
-  }
-} 
+}

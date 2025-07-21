@@ -5,8 +5,8 @@ export interface IWeeklyTargetDocument extends IWeeklyTarget, Document {}
 
 const weeklyTargetSchema = new Schema<IWeeklyTargetDocument>({
   userId: { type: String, required: true },
-  startDate: { type: Date, required: true },
-  endDate: { type: Date, required: true },
+  startDate: { type: String, required: true },
+  endDate: { type: String, required: true },
   year: { type: Number, required: true },
   weekNumber: { type: Number, required: true },
   appointmentRate: { type: Number, required: true },
