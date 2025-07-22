@@ -10,6 +10,52 @@ export class ActualService {
     this.actualRepository = new ActualRepository();
   }
 
+  /**
+   * Get Actuals for a year, aggregated by month (array of 12 objects).
+   */
+  public async getActualYearlyMonthlyAggregate(
+    userId: string,
+    year: number
+  ): Promise<IWeeklyActual[]> {
+    const results: IWeeklyActual[] = [];
+    for (let month = 0; month < 12; month++) {
+      const monthStart = new Date(year, month, 1);
+      const monthEnd = new Date(year, month + 1, 0);
+      const monthStartStr = monthStart.toISOString().slice(0, 10);
+      const monthEndStr = monthEnd.toISOString().slice(0, 10);
+      // Get all weeks in this month
+      const weeks = DateUtils.getMonthWeeks(monthStartStr, monthEndStr);
+      const weeklyActuals = await Promise.all(
+        weeks.map(async ({ weekStart, weekEnd }) => {
+          const actual = await this.actualRepository.findActualByStartDate(userId, weekStart);
+          return actual
+            ? actual.toObject()
+            : this._zeroFilledActual(weekStart, weekEnd, userId);
+        })
+      );
+      // Aggregate all weeks in the month into a single object
+      let aggregated: IWeeklyActual;
+      if (weeklyActuals.length === 0) {
+        aggregated = this._zeroFilledActual(monthStartStr, monthEndStr, userId);
+      } else {
+        aggregated = weeklyActuals.reduce((acc, curr) => {
+          acc.testingBudgetSpent += curr.testingBudgetSpent || 0;
+          acc.awarenessBrandingBudgetSpent += curr.awarenessBrandingBudgetSpent || 0;
+          acc.leadGenerationBudgetSpent += curr.leadGenerationBudgetSpent || 0;
+          acc.revenue += curr.revenue || 0;
+          acc.jobsBooked += curr.jobsBooked || 0;
+          acc.estimatesRan += curr.estimatesRan || 0;
+          acc.estimatesSet += curr.estimatesSet || 0;
+          return acc;
+        }, this._zeroFilledActual(monthStartStr, monthEndStr, userId));
+      }
+      aggregated.startDate = monthStartStr;
+      aggregated.endDate = monthEndStr;
+      results.push(aggregated);
+    }
+    return results;
+  }
+
   private _zeroFilledActual(
     startDate: string,
     endDate: string,
@@ -171,7 +217,7 @@ export class ActualService {
       case "monthly":
         return this.getActualMonthly(userId, startDate, endDate);
       case "yearly":
-        return this.getActualYearly(userId, new Date(startDate).getFullYear());
+        return this.getActualYearlyMonthlyAggregate(userId, new Date(startDate).getFullYear());
       default:
         throw new Error("Invalid type provided");
     }
