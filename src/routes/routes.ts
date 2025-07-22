@@ -1,6 +1,6 @@
 import { Express, Request, Response } from "express";
 import authRouter from "./auth.routes.js"
-import weeklyActualRouter from "./weeklyActual.routes.js"
+import actualRouter from "./report.routes.js"
 import reportRouter from "./report.routes.js"
 import targetRouter from "./target.routes.js"
 import adminRouter from "./admin.routes.js"
@@ -20,7 +20,7 @@ interface Route {
 const authenticatedRoutes: Route[] = [
   {
     path: "/api/v1/actual",
-    router: weeklyActualRouter,
+    router: actualRouter,
     middlewares: [],
   },
   {
@@ -63,8 +63,8 @@ const configureRoutes = (app: Express): void => {
   authenticatedRoutes.forEach((route: Route) => {
     app.use(
       route.path,
-      addContext,
-      verifyTokenMiddleware,
+      // addContext,
+      // verifyTokenMiddleware,
       ...(route.middlewares ?? []),
       route.router
     );
