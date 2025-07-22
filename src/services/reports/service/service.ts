@@ -45,12 +45,12 @@ export class ReportService {
     // Aggregate actuals using only available fields
     const aggregatedActuals = actualsData.reduce(
       (acc, curr) => ({
-        appointmentRate: acc.appointmentRate + curr.appointmentRate,
-        avgJobSize: acc.avgJobSize + curr.avgJobSize,
-        closeRate: acc.closeRate + curr.closeRate,
-        com: acc.com + curr.com,
-        revenue: acc.revenue + curr.revenue,
-        showRate: acc.showRate + curr.showRate,
+        appointmentRate: acc.appointmentRate,
+        avgJobSize: acc.avgJobSize,
+        closeRate: acc.closeRate,
+        com: acc.com,
+        revenue: acc.revenue,
+        showRate: acc.showRate,
       }),
       { appointmentRate: 0, avgJobSize: 0, closeRate: 0, com: 0, revenue: 0, showRate: 0 }
     );
