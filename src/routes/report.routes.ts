@@ -1,11 +1,13 @@
 import { Router } from 'express';
-import { ReportController } from '../controllers/reportController.js';
-import { ReportService } from '../services/reports/service/service.js';
+import { ActualController } from '../controllers/actualController.js';
 
 const router = Router();
-const reportService = new ReportService();
-const reportController = new ReportController(reportService);
+const controller = new ActualController();
 
-router.get("/", reportController.get);
+// Upsert actual data for a week
+router.post('/upsert', controller.upsertActual);
+
+// Get actuals by period (weekly/monthly/yearly)
+router.get('/get', controller.getActuals);
 
 export default router;
