@@ -8,7 +8,8 @@ export interface IWeeklyActual {
   awarenessBrandingBudgetSpent: number;
   leadGenerationBudgetSpent: number;
   revenue: number;
-  jobsBooked: number;
+  sales: number;        // renamed from jobsBooked
+  leads: number;        // new field
   estimatesRan: number;
   estimatesSet: number;
 }
@@ -23,12 +24,13 @@ const weeklyActualSchema = new Schema<IWeeklyActualDocument>({
   awarenessBrandingBudgetSpent: { type: Number, required: true },
   leadGenerationBudgetSpent: { type: Number, required: true },
   revenue: { type: Number, required: true },
-  jobsBooked: { type: Number, required: true },
+  sales: { type: Number, required: true },            // updated
+  leads: { type: Number, required: true },            // new field
   estimatesRan: { type: Number, required: true },
   estimatesSet: { type: Number, required: true },
 }, { timestamps: true });
 
-// Optional: Enforce uniqueness on (userId + startDate) to prevent duplicate weekly entries
+// Enforce uniqueness on (userId + startDate)
 weeklyActualSchema.index({ userId: 1, startDate: 1 }, { unique: true });
 
 export default model<IWeeklyActualDocument>('WeeklyActual', weeklyActualSchema);
