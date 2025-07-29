@@ -4,7 +4,8 @@ export interface IMonthlyActual {
   awarenessBrandingBudgetSpent: number;
   leadGenerationBudgetSpent: number;
   revenue: number;
-  jobsBooked: number;
+  sales: number; // renamed from jobsBooked
+  leads: number; // new field
   estimatesRan: number;
   estimatesSet: number;
 }
@@ -16,7 +17,7 @@ export interface IActual {
   totalBrandingBudget: number;
   totalLeadGenBudget: number;
   totalRevenue: number;
-  totalJobsBooked: number;
+  totalSales: number; // renamed from totalJobsBooked
   totalEstimatesRan: number;
   totalEstimatesSet: number;
 }
@@ -29,7 +30,8 @@ export interface IWeeklyActual {
   awarenessBrandingBudgetSpent: number;
   leadGenerationBudgetSpent: number;
   revenue: number;
-  jobsBooked: number;
+  sales: number; // renamed from jobsBooked
+  leads: number; // new field
   estimatesRan: number;
   estimatesSet: number;
 }
@@ -39,6 +41,5 @@ export interface IActualQuery {
   startDate: Date;
   endDate: Date;
 }
-
 
 export interface IWeeklyActualDocument extends IWeeklyActual, Document {}
