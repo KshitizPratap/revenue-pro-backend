@@ -15,6 +15,9 @@ export class TargetController {
 
   async upsertTarget(req: Request, res: Response): Promise<void> {
     try {
+      console.log("=== Upsert Target Request ===");
+      console.log("Request body:", JSON.stringify(req.body, null, 2));
+      
       const user = req.context.getUser();
       let userId: string;
       if (user && user.role === "ADMIN" && req.body.userId) {
@@ -22,10 +25,14 @@ export class TargetController {
       } else {
         userId = req.context.getUserId();
       }
+      
+      console.log("User ID:", userId);
+      console.log("User role:", user?.role);
 
       // Accept both a single object and an array of targets
       // If the request body has a 'targets' array, use it; otherwise, treat the body as a single target object
       const targets = Array.isArray(req.body) ? req.body : [req.body];
+      console.log("Number of targets to process:", targets.length);
       
       const allowedFields = [
         "appointmentRate",
@@ -44,10 +51,13 @@ export class TargetController {
       const results: any[] = [];
       const errors: any[] = [];
 
-      for (const target of targets) {
+      for (let i = 0; i < targets.length; i++) {
+        const target = targets[i];
+        console.log(`Processing target ${i + 1}/${targets.length}:`, target);
+        
         const { startDate, endDate, queryType, ...targetData } = target;
         if (!startDate || !queryType) {
-          // errors.push({ error: "startDate and queryType are required for each target (monthly or yearly)" });
+          console.log(`Skipping target ${i + 1}: missing startDate or queryType`);
           continue;
         }
         
@@ -68,6 +78,8 @@ export class TargetController {
           }
         }
         
+        console.log(`Filtered target data:`, filteredTargetData);
+        
         try {
           // Handles both monthly and yearly upserts based on queryType
           const result = await this.service.upsertTargetByPeriod(
@@ -87,10 +99,16 @@ export class TargetController {
             results.push(result);
           }
         } catch (err) {
-          console.error('Error processing target:', err);
-          // errors.push({ error: err instanceof Error ? err.message : err });
+          console.error(`Error processing target ${i + 1}:`, err);
+          errors.push({ 
+            targetIndex: i, 
+            error: err instanceof Error ? err.message : String(err),
+            stack: err instanceof Error ? err.stack : undefined
+          });
         }
       }
+
+      console.log(`Processing complete. Results: ${results.length}, Errors: ${errors.length}`);
 
       utils.sendSuccessResponse(res, 200, {
         success: true,
@@ -99,6 +117,7 @@ export class TargetController {
       });
     } catch (error) {
       console.error("Error in upsertTarget (monthly/yearly):", error);
+      console.error("Error stack:", error instanceof Error ? error.stack : 'No stack trace');
       utils.sendErrorResponse(res, error);
     }
   }
@@ -159,10 +178,11 @@ export class TargetController {
       let results;
       switch (queryTypeStr) {
         case "weekly":
-          results = await this.service.getWeeklyTarget(
+          results = await this.service.getWeeklyTargetsInRange(
             userId as string,
             startDateStr as string,
-            endDateStr as string
+            endDateStr as string,
+            queryTypeStr
           );
           break;
         case "monthly":

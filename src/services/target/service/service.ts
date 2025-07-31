@@ -15,13 +15,15 @@ export class TargetService {
   private _aggregateTargets(
     targets: IWeeklyTargetDocument[],
     queryType: string,
-    userId?: string
+    userId?: string,
+    startDate?: string,
+    endDate?: string
   ): IWeeklyTargetDocument {
     if (targets.length === 0) {
       return {
         userId: userId || "",
-        startDate: new Date().toISOString(),
-        endDate: new Date().toISOString(),
+        startDate: startDate || new Date().toISOString(),
+        endDate: endDate || new Date().toISOString(),
         appointmentRate: 0,
         avgJobSize: 0,
         closeRate: 0,
@@ -34,11 +36,35 @@ export class TargetService {
       } as unknown as IWeeklyTargetDocument;
     }
 
+    // Use the passed dates if available, otherwise calculate from first target
+    let finalStartDate: string;
+    let finalEndDate: string;
+    let year: number;
+    
+    if (startDate && endDate) {
+      // Use the passed dates (this is what we want for monthly aggregation)
+      finalStartDate = startDate;
+      finalEndDate = endDate;
+      year = new Date(startDate).getFullYear();
+    } else {
+      // Fallback to calculating from first target (for backward compatibility)
+      const firstTarget = targets[0];
+      const firstDate = new Date(firstTarget.startDate);
+      year = firstDate.getFullYear();
+      const month = firstDate.getMonth();
+      
+      const monthStart = new Date(year, month, 1);
+      const monthEnd = new Date(year, month + 1, 0);
+      
+      finalStartDate = monthStart.toISOString().split('T')[0];
+      finalEndDate = monthEnd.toISOString().split('T')[0];
+    }
+    
     const aggregated: IWeeklyTarget = {
       userId: targets[0].userId,
-      startDate: targets[0].startDate,
-      endDate: targets[targets.length - 1].endDate,
-      year: targets[0].year,
+      startDate: finalStartDate,
+      endDate: finalEndDate,
+      year: year,
       weekNumber: targets[0].weekNumber,
       appointmentRate: 0,
       avgJobSize: 0,
@@ -49,9 +75,12 @@ export class TargetService {
       queryType: targets[0].queryType || "",
     };
 
+    // Sum up revenue from all weekly targets
     for (const target of targets) {
       aggregated.revenue += target.revenue || 0;
     }
+    
+    // Use values from the first target for other fields (they should be the same across weeks)
     aggregated.avgJobSize = targets[0].avgJobSize || 0;
     aggregated.appointmentRate = targets[0].appointmentRate || 0;
     aggregated.showRate = targets[0].showRate || 0;
@@ -159,7 +188,7 @@ export class TargetService {
       
       if (weeksInMonth.length === 0) {
         console.log('No weeks found, returning empty aggregate');
-        return this._aggregateTargets([], queryType, userId);
+        return this._aggregateTargets([], queryType, userId, startDate, endDate);
       }
       
       const monthlyProratedData: Partial<IWeeklyTarget> = {
@@ -188,14 +217,9 @@ export class TargetService {
       const monthlyResults = await Promise.all(monthlyUpsertPromises);
       console.log(`Created ${monthlyResults.length} weekly targets`);
       
-      // For yearly queryType, return all weekly targets instead of aggregating
-      if (queryType === "yearly") {
-        console.log(`Returning ${monthlyResults.length} weekly targets for yearly queryType`);
-        return monthlyResults;
-      }
-      
-      console.log(`Aggregating ${monthlyResults.length} weekly targets`);
-      return this._aggregateTargets(monthlyResults, queryType, userId);
+      // Always aggregate the results into a monthly summary
+      console.log(`Aggregating ${monthlyResults.length} weekly targets into monthly summary`);
+      return this._aggregateTargets(monthlyResults, queryType, userId, startDate, endDate);
     } catch (error) {
       console.error('Error in _upsertMonthlyTarget:', error);
       throw error;
@@ -209,30 +233,87 @@ export class TargetService {
     queryType: "weekly" | "monthly" | "yearly",
     data: Partial<IWeeklyTarget>
   ): Promise<IWeeklyTargetDocument | IWeeklyTargetDocument[]> {
-    switch (queryType) {
-      case "weekly":
-        return this.upsertWeeklyTarget(userId, startDate, endDate, data, "monthly");
-        
-      case "monthly":
-        return this._upsertMonthlyTarget(
-          userId,
-          startDate,
-          endDate,
-          data,
-          queryType
-        );
-      case "yearly":
-        // For yearly, process as monthly but return all weekly targets
-        return this._upsertMonthlyTarget(
-          userId,
-          startDate,
-          endDate,
-          data,
-          queryType
-        );
-      default:
-        throw new Error("Invalid queryType");
+    try {
+      console.log(`=== upsertTargetByPeriod ===`);
+      console.log(`userId: ${userId}`);
+      console.log(`startDate: ${startDate}`);
+      console.log(`endDate: ${endDate}`);
+      console.log(`queryType: ${queryType}`);
+      console.log(`data:`, data);
+      
+      switch (queryType) {
+        case "weekly":
+          console.log(`Processing as weekly target`);
+          return this.upsertWeeklyTarget(userId, startDate, endDate, data, queryType);
+          
+        case "monthly":
+          console.log(`Processing as monthly target`);
+          return this._upsertMonthlyTarget(
+            userId,
+            startDate,
+            endDate,
+            data,
+            queryType
+          );
+        case "yearly":
+          console.log(`Processing as yearly target`);
+          // For yearly, process as monthly but return all weekly targets
+          return this._upsertMonthlyTarget(
+            userId,
+            startDate,
+            endDate,
+            data,
+            queryType
+          );
+        default:
+          throw new Error(`Invalid queryType: ${queryType}`);
+      }
+    } catch (error) {
+      console.error(`Error in upsertTargetByPeriod:`, error);
+      console.error(`Error stack:`, error instanceof Error ? error.stack : 'No stack trace');
+      throw error;
     }
+  }
+
+  public async getWeeklyTargetsInRange(
+    userId: string,
+    startDate: string,
+    endDate: string,
+    queryType: string = "monthly"
+  ): Promise<IWeeklyTargetDocument[]> {
+    console.log(`=== Getting Weekly Targets In Range ===`);
+    console.log(`userId: ${userId}`);
+    console.log(`startDate: ${startDate}`);
+    console.log(`endDate: ${endDate}`);
+    console.log(`queryType: ${queryType}`);
+    
+    // Get all weeks in the specified date range
+    const weeksInRange = DateUtils.getMonthWeeks(startDate, endDate);
+    console.log(`Weeks in range: ${weeksInRange.length}`);
+    console.log('Weeks:', weeksInRange);
+    
+    if (weeksInRange.length === 0) {
+      console.log('No weeks found in the specified range');
+      return [];
+    }
+    
+    // Get weekly targets for each week in the range
+    const weeklyTargets = await Promise.all(
+      weeksInRange.map(week => 
+        this.getWeeklyTarget(userId, week.weekStart, week.weekEnd, queryType)
+      )
+    );
+    
+    console.log(`Found ${weeklyTargets.length} weekly targets`);
+    
+    // Filter targets by queryType
+    const filteredTargets = weeklyTargets.filter(target => 
+      !queryType || target.queryType === queryType
+    );
+    
+    console.log(`Filtered to ${filteredTargets.length} targets with queryType: ${queryType}`);
+    
+    return filteredTargets;
   }
 
   public async getWeeklyTarget(
@@ -321,7 +402,25 @@ export class TargetService {
     );
     
     console.log(`Found ${weeklyTargets.length} weekly targets`);
-    return weeklyTargets;
+    
+    // Filter targets by queryType
+    const filteredTargets = weeklyTargets.filter(target => 
+      !queryType || target.queryType === queryType
+    );
+    
+    console.log(`Filtered to ${filteredTargets.length} targets with queryType: ${queryType}`);
+    
+    if (filteredTargets.length === 0) {
+      console.log('No targets found with the specified queryType');
+      // Return a zero-filled monthly summary
+      return [this._aggregateTargets([], queryType, userId, startDate, endDate)];
+    }
+    
+    // Aggregate all weekly targets into a monthly summary
+    const monthlySummary = this._aggregateTargets(filteredTargets, queryType, userId, startDate, endDate);
+    
+    console.log(`Returning monthly summary:`, monthlySummary);
+    return [monthlySummary];
   }
 
   public async getAggregatedYearlyTarget(
@@ -366,6 +465,47 @@ export class TargetService {
     
     console.log(`Filtered to ${filteredTargets.length} targets with queryType: ${queryType}`);
     
-    return filteredTargets;
+    // Group weekly targets by month and aggregate them
+    const monthlyGroups = new Map<string, IWeeklyTargetDocument[]>();
+    
+    for (const target of filteredTargets) {
+      const targetDate = new Date(target.startDate);
+      const monthKey = `${targetDate.getFullYear()}-${String(targetDate.getMonth() + 1).padStart(2, '0')}`;
+      
+      if (!monthlyGroups.has(monthKey)) {
+        monthlyGroups.set(monthKey, []);
+      }
+      monthlyGroups.get(monthKey)!.push(target);
+    }
+    
+    // Aggregate each month's weekly targets into monthly summaries
+    const monthlyResults: IWeeklyTargetDocument[] = [];
+    
+    for (const [monthKey, weekTargets] of monthlyGroups) {
+      if (weekTargets.length > 0) {
+        const year = parseInt(monthKey.split('-')[0]);
+        const month = parseInt(monthKey.split('-')[1]) - 1; // Month is 0-indexed
+        
+        // Calculate month start and end dates
+        const monthStart = new Date(year, month, 1);
+        const monthEnd = new Date(year, month + 1, 0);
+        
+        const monthlySummary = this._aggregateTargets(
+          weekTargets, 
+          queryType, 
+          userId, 
+          monthStart.toISOString().split('T')[0],
+          monthEnd.toISOString().split('T')[0]
+        );
+        
+        monthlyResults.push(monthlySummary);
+      }
+    }
+    
+    // Sort by date
+    monthlyResults.sort((a, b) => new Date(a.startDate).getTime() - new Date(b.startDate).getTime());
+    
+    console.log(`Returning ${monthlyResults.length} monthly summaries`);
+    return monthlyResults;
   }
 }
