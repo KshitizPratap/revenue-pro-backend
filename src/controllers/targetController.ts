@@ -201,15 +201,31 @@ export class TargetController {
             userId as string,
             startDateStr as string,
             endDateStr as string,
-            queryTypeStr
+            queryTypeStr,
+            queryTypeStr // Pass the original queryType
           );
           break;
         case "monthly":
-          results = await this.service.getAggregatedMonthlyTarget(
+          if (!startDateStr) {
+            utils.sendErrorResponse(
+              res,
+              "startDate is required for monthly query"
+            );
+            return;
+          }
+          if (!endDateStr) {
+            utils.sendErrorResponse(
+              res,
+              "endDate is required for monthly query"
+            );
+            return;
+          }
+          // For monthly queries, return weekly targets organized by months (same as yearly)
+          results = await this.service.getYearlyTargetsOrganizedByMonths(
             userId as string,
             startDateStr as string,
             endDateStr as string,
-            "monthly"
+            queryTypeStr
           );
           break;
         case "yearly":
@@ -227,11 +243,12 @@ export class TargetController {
             );
             return;
           }
-          results = await this.service.getAggregatedYearlyTarget(
-            userId,
-            startDateStr,
-            endDateStr,
-            queryTypeStr as string
+          // For yearly queries, return weekly targets organized by months
+          results = await this.service.getYearlyTargetsOrganizedByMonths(
+            userId as string,
+            startDateStr as string,
+            endDateStr as string,
+            queryTypeStr
           );
           break;
       }
