@@ -194,15 +194,12 @@ export class TargetController {
         return;
       }
 
-      let results;
+      let targetResults: any[] = []; // Added type annotation
       switch (queryTypeStr) {
         case "weekly":
-          results = await this.service.getWeeklyTargetsInRange(
-            userId as string,
-            startDateStr as string,
-            endDateStr as string,
-            queryTypeStr,
-            queryTypeStr // Pass the original queryType
+          // For weekly, also return organized by months but with all weeks in the range
+          targetResults = await this.service.getAllWeeksOrganizedByMonths(
+            userId as string, startDateStr as string, endDateStr as string, queryTypeStr
           );
           break;
         case "monthly":
@@ -220,12 +217,9 @@ export class TargetController {
             );
             return;
           }
-          // For monthly queries, return weekly targets organized by months (same as yearly)
-          results = await this.service.getYearlyTargetsOrganizedByMonths(
-            userId as string,
-            startDateStr as string,
-            endDateStr as string,
-            queryTypeStr
+          // For monthly queries, return all weekly targets organized by months
+          targetResults = await this.service.getAllWeeksOrganizedByMonths(
+            userId as string, startDateStr as string, endDateStr as string, queryTypeStr
           );
           break;
         case "yearly":
@@ -243,17 +237,14 @@ export class TargetController {
             );
             return;
           }
-          // For yearly queries, return weekly targets organized by months
-          results = await this.service.getYearlyTargetsOrganizedByMonths(
-            userId as string,
-            startDateStr as string,
-            endDateStr as string,
-            queryTypeStr
+          // For yearly queries, return all weekly targets organized by months
+          targetResults = await this.service.getAllWeeksOrganizedByMonths(
+            userId as string, startDateStr as string, endDateStr as string, queryTypeStr
           );
           break;
       }
 
-      utils.sendSuccessResponse(res, 200, { success: true, data: results });
+      utils.sendSuccessResponse(res, 200, { success: true, data: targetResults });
     } catch (error) {
       console.error("Error in getTargets:", error);
       utils.sendErrorResponse(res, error);

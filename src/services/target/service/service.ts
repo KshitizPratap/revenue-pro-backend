@@ -143,82 +143,76 @@ export class TargetService {
     queryType: string
   ): Promise<IWeeklyTargetDocument> {
     try {
-      console.log(`=== Creating/Updating Weekly Target ===`);
-      console.log(`userId: ${userId}`);
-      console.log(`startDate: ${startDate}`);
-      console.log(`endDate: ${endDate}`);
-      console.log(`queryType: ${queryType}`);
-      console.log(`data:`, data);
+      console.log(`=== Upserting Weekly Target ===`);
+      console.log(`userId: ${userId}, startDate: ${startDate}, queryType: ${queryType}`);
       
-      const weekData = DateUtils.getWeekDetails(startDate);
-      console.log(`Week data:`, weekData);
-      
-      const defaultTarget: IWeeklyTarget = {
-        userId,
-        startDate: weekData.weekStart,
-        endDate: weekData.weekEnd,
-        year: weekData.year,
-        weekNumber: weekData.weekNumber,
-        appointmentRate: data?.appointmentRate ?? 0,
-        avgJobSize: data.avgJobSize ?? 0,
-        closeRate: data?.closeRate ?? 0,
-        com: data.com ?? 0,
-        revenue: data?.revenue ?? 0,
-        showRate: data?.showRate ?? 0,
-        queryType: queryType,
-      };    
-
-      console.log(`Default target:`, defaultTarget);
-
-      // Check if the target date is in the past or current period
-      if (this.isDateInPastOrCurrent(startDate, queryType as "weekly" | "monthly" | "yearly")) {
-        throw new Error(`Cannot modify targets for past or current ${queryType} periods. Target date: ${startDate}`);
+      // For direct weekly updates, prevent editing past/current weeks.
+      // Monthly/Yearly updates have their own checks in upsertTargetByPeriod.
+      if (queryType === 'weekly' && this.isDateInPastOrCurrent(startDate, 'weekly')) {
+        throw new Error(`Cannot modify targets for past or current weekly periods.`);
       }
 
-      // Try to find an existing target
-      const existingTarget = await this.targetRepository.findTargetByStartDate(
-        userId,
-        startDate,
-        queryType
-      );
-      
-      console.log(`Existing target found:`, !!existingTarget);
-        
-      let target: IWeeklyTargetDocument | null;
+      const weekInfo = DateUtils.getWeekDetails(startDate);
+
+      // Find any existing target for this week
+      let existingTarget = await this.targetRepository.findTargetByStartDate(userId, weekInfo.weekStart, "yearly");
+      if (!existingTarget) {
+        existingTarget = await this.targetRepository.findTargetByStartDate(userId, weekInfo.weekStart, "monthly");
+      }
+      if (!existingTarget) {
+        existingTarget = await this.targetRepository.findTargetByStartDate(userId, weekInfo.weekStart, "weekly");
+      }
+
       if (existingTarget) {
-        // Validate query type change if existing target has different queryType
+        console.log(`Found existing target with queryType: ${existingTarget.queryType}`);
+        let finalQueryType = existingTarget.queryType; // Default to not changing it
+
+        // If requested queryType is different, check if upgrade is allowed
         if (existingTarget.queryType !== queryType) {
-          const isChangeAllowed = this.validateQueryTypeChange(existingTarget.queryType, queryType);
-          if (!isChangeAllowed) {
-            throw new Error(`Query type change from '${existingTarget.queryType}' to '${queryType}' is not allowed.`);
+          if (this.validateQueryTypeChange(existingTarget.queryType, queryType)) {
+            finalQueryType = queryType; // It's an allowed upgrade
+            console.log(`Query type change from ${existingTarget.queryType} to ${finalQueryType} is allowed.`);
+          } else {
+            console.log(`Query type change from ${existingTarget.queryType} to ${queryType} is NOT allowed. Data will be updated, but queryType will remain ${existingTarget.queryType}.`);
           }
         }
-        
-        // If target exists, update it with new data and queryType
-        console.log(`Updating existing target`);
-        target = await this.targetRepository.updateTarget({
+
+        const updatedData = {
           ...existingTarget.toObject(),
           ...data,
-          queryType, // Update the queryType
-        });
-        console.log("Target updated successfully");
-      } else {
-        // If no target exists, create a new one
-        console.log(`Creating new target`);
-        target = await this.targetRepository.createTarget({
-          ...defaultTarget,
-          queryType,
-        });
-        console.log("Target created successfully");
-      }
+          queryType: finalQueryType,
+        };
 
-      if (!target) {
-        console.error("Failed to update or create weekly target");
-        throw new Error("Failed to update or create weekly target.");
+        const target = await this.targetRepository.updateTarget(updatedData);
+        if (!target) {
+            throw new Error("Failed to update weekly target.");
+        }
+        console.log("Target updated successfully");
+        return target;
+      } else {
+        // No existing target, create a new one
+        console.log(`No existing target found. Creating new target with queryType: ${queryType}`);
+        const newTargetData: IWeeklyTarget = {
+          userId,
+          startDate: weekInfo.weekStart,
+          endDate: weekInfo.weekEnd,
+          year: weekInfo.year,
+          weekNumber: weekInfo.weekNumber,
+          appointmentRate: data?.appointmentRate ?? 0,
+          avgJobSize: data.avgJobSize ?? 0,
+          closeRate: data?.closeRate ?? 0,
+          com: data.com ?? 0,
+          revenue: data?.revenue ?? 0,
+          showRate: data?.showRate ?? 0,
+          queryType: queryType,
+        };
+        const target = await this.targetRepository.createTarget(newTargetData);
+        if (!target) {
+            throw new Error("Failed to create weekly target.");
+        }
+        console.log("New target created successfully");
+        return target;
       }
-      
-      console.log(`Final target:`, target);
-      return target;
     } catch (error) {
       console.error('Error in upsertWeeklyTarget:', error);
       throw error;
@@ -561,35 +555,7 @@ export class TargetService {
       console.log(`queryType: ${queryType}`);
       console.log(`data:`, data);
       
-      // Check for existing targets and validate query type changes
-      if (queryType === "weekly") {
-        // For weekly, check the specific week
-        const existingTarget = await this.targetRepository.findTargetByStartDate(
-          userId,
-          startDate,
-          queryType
-        );
-        if (existingTarget && existingTarget.queryType !== queryType) {
-          const isChangeAllowed = this.validateQueryTypeChange(existingTarget.queryType, queryType);
-          if (!isChangeAllowed) {
-            throw new Error(`Query type change from '${existingTarget.queryType}' to '${queryType}' is not allowed.`);
-          }
-        }
-      } else if (queryType === "monthly" || queryType === "yearly") {
-        // For monthly/yearly, check if any existing targets in the range have different queryType
-        const existingTargets = await this.getWeeklyTargetsInRange(userId, startDate, endDate, "any");
-        const differentQueryTypes = existingTargets.filter(target => target.queryType !== queryType);
-        
-        if (differentQueryTypes.length > 0) {
-          // Check if any of the existing query types don't allow change to new query type
-          for (const target of differentQueryTypes) {
-            const isChangeAllowed = this.validateQueryTypeChange(target.queryType, queryType);
-            if (!isChangeAllowed) {
-              throw new Error(`Query type change from '${target.queryType}' to '${queryType}' is not allowed for existing targets.`);
-            }
-          }
-        }
-      }
+      // Validation is now handled in upsertWeeklyTarget, no need for pre-checks here.
       
       switch (queryType) {
         case "weekly":
@@ -1004,6 +970,83 @@ export class TargetService {
       monthlyTargets.push(weekTargets);
     }
     
+    console.log(`Organized into ${monthlyTargets.length} months`);
+    return monthlyTargets;
+  }
+
+  public async getAllWeeksOrganizedByMonths(
+    userId: string,
+    startDate: string,
+    endDate: string,
+    queryType: string
+  ): Promise<IWeeklyTargetDocument[][]> {
+    console.log(`=== Getting All Weeks Organized By Months ===`);
+    console.log(`userId: ${userId}`);
+    console.log(`startDate: ${startDate}`);
+    console.log(`endDate: ${endDate}`);
+    console.log(`queryType: ${queryType}`);
+    
+    const properDateRange = DateUtils.getProperDateRange(startDate, endDate, queryType);
+    
+    console.log(`Proper date range: ${properDateRange.startDate} to ${properDateRange.endDate}`);
+    
+    // Fetch all weekly targets within the given date range
+    const allWeeklyTargets = await this.getWeeklyTargetsInRange(
+      userId,
+      properDateRange.startDate,
+      properDateRange.endDate,
+      "any" // Get all targets regardless of stored queryType
+    );
+
+    console.log(`Found ${allWeeklyTargets.length} weekly targets in effective range`);
+
+    // Group weeks by the month where most of their days fall
+    const monthlyGroups = new Map<string, IWeeklyTargetDocument[]>();
+
+    for (const target of allWeeklyTargets) {
+      const weekStart = new Date(target.startDate);
+      const weekEnd = new Date(target.endDate);
+
+      // Count days in each month
+      const daysInMonth = new Map<number, number>();
+      for (let d = new Date(weekStart); d <= weekEnd; d.setDate(d.getDate() + 1)) {
+        const month = d.getMonth();
+        daysInMonth.set(month, (daysInMonth.get(month) || 0) + 1);
+      }
+
+      // Determine the month with the most days
+      let maxDays = 0;
+      let targetMonth = weekStart.getMonth();
+      for (const [month, days] of daysInMonth.entries()) {
+        if (days > maxDays) {
+          maxDays = days;
+          targetMonth = month;
+        }
+      }
+
+      let targetYear = weekStart.getFullYear();
+      if (targetMonth === 0 && weekStart.getMonth() === 11) {
+        targetYear = weekEnd.getFullYear();
+      }
+      const monthKey = `${targetYear}-${String(targetMonth + 1).padStart(2, '0')}`;
+
+      console.log(`Week ${target.startDate} to ${target.endDate} assigned to month ${monthKey}`);
+
+      if (!monthlyGroups.has(monthKey)) {
+        monthlyGroups.set(monthKey, []);
+      }
+      monthlyGroups.get(monthKey)!.push(target);
+    }
+
+    // Convert to array of arrays, sorted by month
+    const monthlyTargets: IWeeklyTargetDocument[][] = [];
+    const sortedMonthKeys = Array.from(monthlyGroups.keys()).sort();
+    for (const monthKey of sortedMonthKeys) {
+      const weekTargets = monthlyGroups.get(monthKey)!;
+      weekTargets.sort((a, b) => new Date(a.startDate).getTime() - new Date(b.startDate).getTime());
+      monthlyTargets.push(weekTargets);
+    }
+
     console.log(`Organized into ${monthlyTargets.length} months`);
     return monthlyTargets;
   }
