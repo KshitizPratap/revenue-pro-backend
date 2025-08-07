@@ -60,7 +60,7 @@ const routes: Route[] = [
     middlewares: [],
   },
   {
-    path: "/api/v1/create/leads",
+    path: "/api/v1/hooks/create-lead",
     router: createLeadRouter,
     middlewares: [],
   }
