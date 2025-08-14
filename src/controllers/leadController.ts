@@ -3,6 +3,7 @@ import { LeadService } from "../services/leads/service/service.js";
 import utils from "../utils/utils.js";
 import { ParsedQs } from "qs";
 import conversionRateModel from "@/services/leads/repository/models/conversionRate.model.js";
+import { conversionRateRepository } from"@/services/leads/repository/repository.js";
 
 export class LeadController {
   private service: LeadService;
@@ -14,6 +15,7 @@ export class LeadController {
     this.createLead = this.createLead.bind(this);
     this.updateLead = this.updateLead.bind(this);
     this.fetchSheetAndUpdateConversion = this.fetchSheetAndUpdateConversion.bind(this);
+    this.getConversionRates = this.getConversionRates.bind(this);
   }
 
   async getLeads(req: Request, res: Response): Promise<void> {
@@ -116,6 +118,28 @@ export class LeadController {
     } catch (error) {
       console.error("Error in fetchSheetAndUpdateConversion:", error);
       utils.sendErrorResponse(res, error);
+    }
+  }
+
+  async getConversionRates(req: Request, res: Response) {
+    try {
+      const clientId = req.query.clientId as string | undefined;
+
+      // Optional filter by clientId
+      const filter = clientId ? { clientId } : {};
+
+      const conversionRates = await conversionRateRepository.getConversionRates(filter);
+
+      return res.status(200).json({
+        success: true,
+        data: conversionRates,
+      });
+    } catch (error: any) {
+      console.error("Error fetching conversion rates:", error);
+      return res.status(500).json({
+        success: false,
+        message: error.message || "Failed to fetch conversion rates",
+      });
     }
   }
 }
