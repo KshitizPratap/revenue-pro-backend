@@ -123,7 +123,19 @@ export class LeadController {
       const leads = await this.service.fetchLeadsFromSheet(sheetUrl, clientId);
 
       console.log("leads fetched");
-      
+
+
+       // 2️⃣ Store all leads using the existing createLead logic
+    const storedLeads = [];
+    for (const payload of leads) {
+      // attach clientId if not present
+      payload.clientId = clientId;
+
+      // delegate to the same service method that your createLead API uses
+      const lead = await this.service.createLead(payload);
+      storedLeads.push(lead);
+    }
+
       // 2 Process leads to calculate conversion rates
       const conversionData = await this.service.processLeads(leads, clientId);
 

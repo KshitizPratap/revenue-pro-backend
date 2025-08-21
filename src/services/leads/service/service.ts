@@ -128,53 +128,40 @@ public async fetchLeadsFromSheet(
     })
     .map((row) => {
       try {
-        // Convert the old estimateSet boolean logic to new status field
-        let status: LeadStatus = 'new';
-        let unqualifiedLeadReason = String(row["Unqualified Lead Reason"] || "");
 
-        // Check if there's an explicit status column first
-        if (row["Status"] && typeof row["Status"] === "string") {
-          const statusValue = row["Status"].toLowerCase().trim();
-          if (['new', 'in_progress', 'estimate_set', 'unqualified'].includes(statusValue)) {
-            status = statusValue as LeadStatus;
-          }
-        } else {
-          // Fallback: Convert from old estimateSet logic
+          // Updated logic: If Estimate Set is true, status is 'estimate_set' and unqualifiedLeadReason is empty
+          // Else, status is 'unqualified' and unqualifiedLeadReason is set from sheet
+          let status: LeadStatus = 'new';      
+          let unqualifiedLeadReason = '';
           const estimateSetValue = row["Estimate Set"];
-          const hasUnqualifiedReason = unqualifiedLeadReason.trim().length > 0;
-          
-          if (hasUnqualifiedReason) {
-            status = 'unqualified';
+          const isEstimateSet = typeof estimateSetValue === "boolean"
+            ? estimateSetValue
+            : typeof estimateSetValue === "number"
+            ? estimateSetValue !== 0
+            : String(estimateSetValue || "").trim().toUpperCase() === "TRUE";
+
+          if (isEstimateSet) {
+            status = 'estimate_set';
+            unqualifiedLeadReason = '';
           } else {
-            const isEstimateSet = typeof estimateSetValue === "boolean"
-              ? estimateSetValue
-              : typeof estimateSetValue === "number"
-              ? estimateSetValue !== 0
-              : String(estimateSetValue || "").trim().toUpperCase() === "TRUE";
-            
-            status = isEstimateSet ? 'estimate_set' : 'new';
+            status = 'unqualified';
+            unqualifiedLeadReason = String(row["Unqualified Lead Reason"] || "");
           }
-        }
 
-        // Clear unqualifiedLeadReason if status is not "unqualified"
-        if (status !== 'unqualified') {
-          unqualifiedLeadReason = '';
-        }
-
-        return {
-          _id: null,
-          status,
-          leadDate: row["Lead Date"] || "",
-          name: String(row["Name"] || ""),
-          email: String(row["Email"] || ""),
-          phone: String(row["Phone"] || ""),
-          zip: String(row["Zip"] || ""),
-          service: String(row["Service"] || ""),
-          adSetName: String(row["Ad Set Name"] || ""),
-          adName: String(row["Ad Name"] || ""),
-          unqualifiedLeadReason,
-          clientId,
-        } as ILead;
+          return {
+            _id: null,
+            status,
+            leadDate: row["Lead Date"] ? new Date(row["Lead Date"]).toISOString().slice(0, 10) : "",
+            name: String(row["Name"] || ""),
+            email: String(row["Email"] || ""),
+            phone: String(row["Phone"] || ""),
+            zip: String(row["Zip"] || ""),
+            service: String(row["Service"] || ""),
+            adSetName: String(row["Ad Set Name"] || ""),
+            adName: String(row["Ad Name"] || ""),
+            unqualifiedLeadReason,
+            clientId,
+          } as ILead;
       } catch (error) {
         console.error("Error mapping row to ILead:", error, "Row data:", row);
         return null;
