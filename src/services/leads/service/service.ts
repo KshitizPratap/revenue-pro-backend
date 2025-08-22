@@ -62,9 +62,41 @@ export class LeadService {
     return await LeadModel.create(payload);
   }
 
-  // Bulk insert leads
+  // Bulk upsert leads with duplicate prevention
   public async bulkCreateLeads(payloads: ILead[]): Promise<ILeadDocument[]> {
-    return await LeadModel.insertMany(payloads);
+    if (payloads.length === 0) return [];
+
+    // Use bulkWrite for upsert operations to prevent duplicates
+    const bulkOps = payloads.map(lead => ({
+      updateOne: {
+        filter: {
+          clientId: lead.clientId,
+          name: lead.name,
+          email: lead.email,
+          phone: lead.phone,
+          service: lead.service,
+          adSetName: lead.adSetName,
+          adName: lead.adName,
+          leadDate: lead.leadDate
+        },
+        update: { $set: lead },
+        upsert: true // Insert if not exists, update if exists
+      }
+    }));
+
+    const result = await LeadModel.bulkWrite(bulkOps, { ordered: false });
+    
+    // Return the upserted/updated documents
+    const upsertedIds = Object.values(result.upsertedIds || {});
+    const modifiedIds = Object.values(result.matchedCount ? 
+      await LeadModel.find({
+        clientId: { $in: payloads.map(p => p.clientId) },
+        name: { $in: payloads.map(p => p.name) },
+        service: { $in: payloads.map(p => p.service) }
+      }).distinct('_id') : []);
+    
+    const allIds = [...upsertedIds, ...modifiedIds];
+    return await LeadModel.find({ _id: { $in: allIds } }).lean().exec();
   }
 
   public async updateLead(
@@ -106,18 +138,51 @@ public async fetchLeadsFromSheet(
 
   let data: any[] = [];
   
+  let allHeaders: string[] = [];
+  
   try {
     const workbook = XLSX.read(buffer, { type: "array", cellDates: true });
     const sheet = workbook.Sheets[workbook.SheetNames[0]];
+    
+    // First, extract ALL headers from the first row, including empty columns
+    const range = XLSX.utils.decode_range(sheet['!ref'] || 'A1:A1');
+    
+    for (let col = range.s.c; col <= range.e.c; col++) {
+      const cellAddress = XLSX.utils.encode_cell({ r: 0, c: col });
+      const cell = sheet[cellAddress];
+      const headerValue = cell ? XLSX.utils.format_cell(cell) : "";
+      allHeaders.push(headerValue.trim()); // don't skip empty ones
+    }
+
+    console.log("All detected headers (including blanks):", allHeaders);
+
+    
+    // Now parse the data with all headers included
     data = XLSX.utils.sheet_to_json(sheet, {
       raw: false,
       dateNF: "yyyy-mm-dd",
+      defval: "", // Default value for empty cells  
+      blankrows: false, // Skip completely empty rows
+      header: allHeaders // Use first row as headers
     });
 
-    console.log("Sheet parsing successful. First row:", data[0]);
-    console.log("Total rows parsed:", data.length);
+    // Ensure all detected headers are present in each data row
+    if (data.length > 0) {
+      data = data.map(row => {
+        const newRow = { ...row };
+        // Add missing headers with empty values
+        allHeaders.forEach(header => {
+          if (!(header in newRow)) {
+            newRow[header] = "";
+          }
+        });
+        return newRow;
+      });
+    }
+
+    console.log("Sheet parsing successful. Total rows parsed:", data.length);
     
-    // Log column headers to debug mapping issues
+    // Log final available columns
     if (data.length > 0) {
       console.log("Available columns:", Object.keys(data[0]));
     }
@@ -130,6 +195,41 @@ public async fetchLeadsFromSheet(
   if (!data || data.length === 0) {
     console.log("No data found in sheet");
     return [];
+  }
+
+  // STRICT HEADER VALIDATION - All required headers must be present with exact names
+  const requiredHeaders = [
+    "Estimate Set (Yes/No)",
+    "Lead Date", 
+    "Name",
+    "Email",
+    "Phone", 
+    "Zip",
+    "Service",
+    "Ad Set Name",
+    "Ad Name", 
+    "Unqualified Lead Reason"
+  ];
+
+  // Use the headers we extracted during parsing (includes empty columns)
+  const availableHeaders = data.length > 0 ? Object.keys(data[0]) : allHeaders;
+
+  const missingHeaders: string[] = [];
+  
+  // Check for missing required headers
+  for (const requiredHeader of requiredHeaders) {
+    if (!availableHeaders.includes(requiredHeader)) {
+      missingHeaders.push(requiredHeader);
+    }
+  }
+
+  // If any headers are missing, throw error before any processing
+  if (missingHeaders.length > 0) {
+    const errorMessage = `Missing required sheet headers: ${missingHeaders.join(', ')}. ` +
+      `Available headers: ${availableHeaders.join(', ')}. ` +
+      `Please ensure your sheet has exactly these headers: ${requiredHeaders.join(', ')}`;
+    console.error("Header validation failed:", errorMessage);
+    throw new Error(errorMessage);
   }
 
   // Pre-allocate arrays for better performance with large datasets
@@ -146,21 +246,24 @@ public async fetchLeadsFromSheet(
       continue;
     }
     
-    const hasIdentifier = row["Name"] || row["Email"];
-    const hasService = row["Service"];
-    const hasAdInfo = row["Ad Set Name"] && row["Ad Name"];
+    // Lead validation: Must have required business fields (name is always required for identification)
+    const hasName = row["Name"] && String(row["Name"]).trim();
+    const hasService = row["Service"] && String(row["Service"]).trim();
+    const hasAdInfo = row["Ad Set Name"] && row["Ad Name"] && 
+                      String(row["Ad Set Name"]).trim() && String(row["Ad Name"]).trim();
     
-    if (!hasIdentifier || !hasService || !hasAdInfo) {
+    if (!hasName || !hasService || !hasAdInfo) {
       skippedRows.push(i);
       continue;
     }
     
     try {
-      // Optimized status determination logic
-      const estimateSetValue = row["Estimate Set"];
+      // Strict header name usage - exact match required
+      const estimateSetValue = row["Estimate Set (Yes/No)"];
       const isEstimateSet = estimateSetValue === true || 
         estimateSetValue === 1 ||
-        (typeof estimateSetValue === "string" && estimateSetValue.trim().toUpperCase() === "TRUE");
+        (typeof estimateSetValue === "string" && estimateSetValue.trim().toUpperCase() === "TRUE") ||
+        (typeof estimateSetValue === "string" && estimateSetValue.trim().toUpperCase() === "YES");
 
       const status: LeadStatus = isEstimateSet ? 'estimate_set' : 'unqualified';
       const unqualifiedLeadReason = isEstimateSet ? '' : String(row["Unqualified Lead Reason"] || "");
@@ -175,7 +278,6 @@ public async fetchLeadsFromSheet(
       }
 
       validLeads.push({
-        _id: null,
         status,
         leadDate,
         name: String(row["Name"] || ""),

@@ -16,8 +16,8 @@ export class LeadController {
     this.getLeads = this.getLeads.bind(this);
     this.createLead = this.createLead.bind(this);
     this.updateLead = this.updateLead.bind(this);
-    this.fetchSheetAndUpdateConversion =
-      this.fetchSheetAndUpdateConversion.bind(this);
+    this.processSheetLeads =
+      this.processSheetLeads.bind(this);
     this.getConversionRates = this.getConversionRates.bind(this);
     this.conditionalUpsertConversionRates =
       this.conditionalUpsertConversionRates.bind(this);
@@ -126,7 +126,7 @@ export class LeadController {
     }
   }
 
-  async fetchSheetAndUpdateConversion(
+  async processSheetLeads(
     req: Request,
     res: Response
   ): Promise<void> {
@@ -164,7 +164,7 @@ export class LeadController {
         data: conversionData,
       });
     } catch (error) {
-      console.error("Error in fetchSheetAndUpdateConversion:", error);
+      console.error("Error in processSheetLeads:", error);
       utils.sendErrorResponse(res, error);
     }
   }

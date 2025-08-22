@@ -66,7 +66,7 @@ const routes: Route[] = [
     middlewares: [],
   },
   {
-    path: "/api/leads/fetch-sheet",
+    path: "/api/leads/process-sheet",
     router: sheetRouter,
     middlewares: [],
   }
