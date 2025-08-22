@@ -1,5 +1,5 @@
 import { Request, Response } from "express";
-import { LeadService } from "../services/leads/service/service.js";
+import { LeadService, SheetProcessingResult } from "../services/leads/service/service.js";
 import utils from "../utils/utils.js";
 import conversionRateUpdateService from "../services/cron/conversionRateUpdateService.js";
 import conversionRateModel, {
@@ -138,30 +138,39 @@ export class LeadController {
         return;
       }
 
-      console.log("lead fetching started");
+      console.log("Sheet processing started for client:", clientId);
 
-      // 1️⃣ Fetch leads from the Google Sheet
-      const leads = await this.service.fetchLeadsFromSheet(sheetUrl, clientId);
-      console.log("leads fetched");
+      // Process the entire sheet with comprehensive statistics
+      const { result: processingResult, conversionData } = await this.service.processCompleteSheet(sheetUrl, clientId);
 
-      // 2️⃣ Bulk insert all leads at once
-      // Attach clientId if not present (should already be set by service, but ensure)
-      const leadsToInsert = leads.map((l) => ({ ...l, clientId }));
-      const storedLeads = await this.service.bulkCreateLeads(leadsToInsert);
-
-      // 3️⃣ Process leads to calculate conversion rates
-      const conversionData = await this.service.processLeads(
-        leadsToInsert,
-        clientId
-      );
-
-      // 4️⃣ Batch upsert conversion rates in DB for optimal performance
-      await conversionRateRepository.batchUpsertConversionRates(conversionData);
+      // Save conversion rates to database
+      if (processingResult.conversionRatesGenerated > 0) {
+        await conversionRateRepository.batchUpsertConversionRates(conversionData);
+      }
 
       utils.sendSuccessResponse(res, 200, {
         success: true,
-        message: "Leads processed and conversion rates updated successfully",
-        data: conversionData,
+        message: "Sheet processed successfully",
+        data: {
+          processing: {
+            totalRowsInSheet: processingResult.totalRowsInSheet,
+            validLeadsProcessed: processingResult.validLeadsProcessed,
+            skippedRows: processingResult.skippedRows,
+          },
+          database: {
+            leadsStoredInDB: processingResult.leadsStoredInDB,
+            newLeadsAdded: processingResult.newLeadsAdded,
+            duplicatesUpdated: processingResult.duplicatesUpdated,
+          },
+          conversionRates: {
+            conversionRatesGenerated: processingResult.conversionRatesGenerated,
+            insights: processingResult.conversionRateInsights,
+          },
+          summary: {
+            processingSuccessRate: `${((processingResult.validLeadsProcessed / processingResult.totalRowsInSheet) * 100).toFixed(1)}%`,
+            newVsDuplicates: `${processingResult.newLeadsAdded} new, ${processingResult.duplicatesUpdated} updated`
+          }
+        }
       });
     } catch (error) {
       console.error("Error in processSheetLeads:", error);
