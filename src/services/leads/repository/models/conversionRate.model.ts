@@ -23,7 +23,7 @@ const conversionRateSchema = new Schema<IConversionRateDocument>(
   { timestamps: true }
 );
 
-// Optional index to prevent duplicates per client per keyField/keyName
-// conversionRateSchema.index({ clientId: 1, keyField: 1, keyName: 1 }, { unique: true });
+// Index to prevent duplicates per client per keyField/keyName
+conversionRateSchema.index({ clientId: 1, keyField: 1, keyName: 1 }, { unique: true });
 
 export default model<IConversionRateDocument>('ConversionRate', conversionRateSchema);

@@ -5,9 +5,9 @@ const leadSchema = new Schema<ILeadDocument>(
   {
     leadDate: { type: String, required: true },
     name: { type: String, required: true },
-    email: { type: String, required: true },
-    phone: { type: String, required: true },
-    zip: { type: String, required: true },
+    email: { type: String, required: false, default: '' }, // Made optional - not all leads have email
+    phone: { type: String, required: false, default: '' }, // Made optional - not all leads have phone
+    zip: { type: String, required: false, default: '' }, // Made optional for consistency
     service: { type: String, required: true },
     adSetName: { type: String, required: true },
     adName: { type: String, required: true },
