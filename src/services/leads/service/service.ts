@@ -35,6 +35,22 @@ type UniqueKey = {
   field: LeadKeyField;
 };
 
+export interface SheetProcessingResult {
+  totalRowsInSheet: number;
+  validLeadsProcessed: number;
+  skippedRows: number;
+  leadsStoredInDB: number;
+  duplicatesUpdated: number;
+  newLeadsAdded: number;
+  conversionRatesGenerated: number;
+  conversionRateInsights: {
+    uniqueServices: string[];
+    uniqueAdSets: string[];
+    uniqueAdNames: string[];
+    uniqueMonths: string[];
+  };
+};
+
 export class LeadService {
   // ---------------- DATABASE OPERATIONS ----------------
   public async getLeads(
@@ -63,8 +79,18 @@ export class LeadService {
   }
 
   // Bulk upsert leads with duplicate prevention
-  public async bulkCreateLeads(payloads: ILead[]): Promise<ILeadDocument[]> {
-    if (payloads.length === 0) return [];
+  public async bulkCreateLeads(payloads: ILead[]): Promise<{
+    documents: ILeadDocument[];
+    stats: {
+      total: number;
+      newInserts: number;
+      duplicatesUpdated: number;
+    };
+  }> {
+    if (payloads.length === 0) return { 
+      documents: [], 
+      stats: { total: 0, newInserts: 0, duplicatesUpdated: 0 }
+    };
 
     // Use bulkWrite for upsert operations to prevent duplicates
     const bulkOps = payloads.map(lead => ({
@@ -86,6 +112,11 @@ export class LeadService {
 
     const result = await LeadModel.bulkWrite(bulkOps, { ordered: false });
     
+    // Get statistics from bulkWrite result
+    const newInserts = result.upsertedCount || 0;
+    const duplicatesUpdated = result.modifiedCount || 0;
+    const total = newInserts + duplicatesUpdated;
+    
     // Return the upserted/updated documents
     const upsertedIds = Object.values(result.upsertedIds || {});
     const modifiedIds = Object.values(result.matchedCount ? 
@@ -96,7 +127,16 @@ export class LeadService {
       }).distinct('_id') : []);
     
     const allIds = [...upsertedIds, ...modifiedIds];
-    return await LeadModel.find({ _id: { $in: allIds } }).lean().exec();
+    const documents = await LeadModel.find({ _id: { $in: allIds } }).lean().exec();
+    
+    return {
+      documents,
+      stats: {
+        total,
+        newInserts,
+        duplicatesUpdated
+      }
+    };
   }
 
   public async updateLead(
@@ -126,7 +166,14 @@ export class LeadService {
 public async fetchLeadsFromSheet(
   sheetUrl: string,
   clientId: string
-): Promise<ILead[]> {
+): Promise<{
+  leads: ILead[];
+  stats: {
+    totalRowsInSheet: number;
+    validLeadsProcessed: number;
+    skippedRows: number;
+  };
+}> {
   const match = sheetUrl.match(/\/d\/([a-zA-Z0-9-_]+)/);
   if (!match) throw new Error("Invalid Google Sheet URL");
   const sheetId = match[1];
@@ -194,7 +241,14 @@ public async fetchLeadsFromSheet(
   // Check if data is empty
   if (!data || data.length === 0) {
     console.log("No data found in sheet");
-    return [];
+    return {
+      leads: [],
+      stats: {
+        totalRowsInSheet: 0,
+        validLeadsProcessed: 0,
+        skippedRows: 0
+      }
+    };
   }
 
   // STRICT HEADER VALIDATION - All required headers must be present with exact names
@@ -300,8 +354,55 @@ public async fetchLeadsFromSheet(
     console.log(`Processed ${validLeads.length} valid leads, skipped ${skippedRows.length} invalid rows`);
   }
 
-  return validLeads;
+  return {
+    leads: validLeads,
+    stats: {
+      totalRowsInSheet: data.length,
+      validLeadsProcessed: validLeads.length,
+      skippedRows: skippedRows.length
+    }
+  };
 }
+
+  // ---------------- COMPREHENSIVE SHEET PROCESSING ----------------
+  public async processCompleteSheet(sheetUrl: string, clientId: string): Promise<{
+    result: SheetProcessingResult;
+    conversionData: any[];
+  }> {
+    // 1. Fetch and parse leads from sheet
+    const sheetResult = await this.fetchLeadsFromSheet(sheetUrl, clientId);
+    const { leads, stats: sheetStats } = sheetResult;
+    
+    // 2. Bulk upsert leads to database
+    const bulkResult = await this.bulkCreateLeads(leads);
+    
+    // 3. Process leads for conversion rates
+    const conversionData = await this.processLeads(leads, clientId);
+    
+    // 4. Extract insights from conversion data
+    const conversionRateInsights = {
+      uniqueServices: [...new Set(conversionData.filter(d => d.keyField === 'service').map(d => d.keyName))],
+      uniqueAdSets: [...new Set(conversionData.filter(d => d.keyField === 'adSetName').map(d => d.keyName))],
+      uniqueAdNames: [...new Set(conversionData.filter(d => d.keyField === 'adName').map(d => d.keyName))],
+      uniqueMonths: [...new Set(conversionData.filter(d => d.keyField === 'leadDate').map(d => d.keyName))]
+    };
+    
+    const result: SheetProcessingResult = {
+      totalRowsInSheet: sheetStats.totalRowsInSheet,
+      validLeadsProcessed: sheetStats.validLeadsProcessed,
+      skippedRows: sheetStats.skippedRows,
+      leadsStoredInDB: bulkResult.stats.total,
+      duplicatesUpdated: bulkResult.stats.duplicatesUpdated,
+      newLeadsAdded: bulkResult.stats.newInserts,
+      conversionRatesGenerated: conversionData.length,
+      conversionRateInsights
+    };
+
+    return {
+      result,
+      conversionData
+    };
+  }
 
   // ---------------- PROCESSING FUNCTIONS ----------------
   // Cache for month name lookups to avoid repeated date parsing
