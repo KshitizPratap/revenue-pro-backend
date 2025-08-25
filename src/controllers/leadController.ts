@@ -24,9 +24,12 @@ export class LeadController {
     this.triggerWeeklyConversionRateUpdate =
       this.triggerWeeklyConversionRateUpdate.bind(this);
     this.getWeeklyUpdateStatus = this.getWeeklyUpdateStatus.bind(this);
+    
+    // this.recalculateLeadScores = this.recalculateLeadScores.bind(this);
+    // this.recalculateAllClientLeadScores = this.recalculateAllClientLeadScores.bind(this);
   }
 
-  async getLeads(req: Request, res: Response): Promise<void> {
+   async getLeads(req: Request, res: Response): Promise<void> {
     try {
       const clientId =
         typeof req.query.clientId === "string" ? req.query.clientId : undefined;
@@ -39,9 +42,36 @@ export class LeadController {
       const endDate =
         typeof req.query.endDate === "string" ? req.query.endDate : undefined;
 
+      // Fetch leads
       const leads = await this.service.getLeads(clientId, startDate, endDate);
 
-      utils.sendSuccessResponse(res, 200, { success: true, data: leads });
+      // Fetch conversion rates for this client
+      const conversionRates = await conversionRateRepository.getConversionRates(clientId ? { clientId } : {});
+
+      // Group conversion rates by field for response
+      const crGrouped = {
+        service: conversionRates
+          .filter(cr => cr.keyField === 'service')
+          .map(cr => ({ name: cr.keyName, conversionRate: cr.conversionRate })),
+        adSet: conversionRates
+          .filter(cr => cr.keyField === 'adSetName')
+          .map(cr => ({ name: cr.keyName, conversionRate: cr.conversionRate })),
+        adName: conversionRates
+          .filter(cr => cr.keyField === 'adName')
+          .map(cr => ({ name: cr.keyName, conversionRate: cr.conversionRate })),
+        dates: conversionRates
+          .filter(cr => cr.keyField === 'leadDate')
+          .map(cr => ({ date: cr.keyName, conversionRate: cr.conversionRate })),
+        zip: conversionRates
+          .filter(cr => cr.keyField === 'zip')
+          .map(cr => ({ zip: cr.keyName, conversionRate: cr.conversionRate })),
+      };
+
+      utils.sendSuccessResponse(res, 200, {
+        success: true,
+        data: leads,
+        conversionRates: crGrouped
+      });
     } catch (error) {
       console.error("Error in getLeads:", error);
       utils.sendErrorResponse(res, error);
@@ -79,6 +109,9 @@ export class LeadController {
           payload.unqualifiedLeadReason = "";
         }
 
+        // Initialize leadScore as 0 for new leads (will be calculated on first getLeads call)
+        payload.leadScore = 0;
+
         const lead = await this.service.createLead(payload);
         createdLeads.push(lead);
       }
@@ -92,6 +125,7 @@ export class LeadController {
       utils.sendErrorResponse(res, error);
     }
   }
+
 
   async updateLead(req: Request, res: Response): Promise<void> {
     try {
@@ -126,10 +160,8 @@ export class LeadController {
     }
   }
 
-  async processSheetLeads(
-    req: Request,
-    res: Response
-  ): Promise<void> {
+
+  async processSheetLeads(req: Request, res: Response): Promise<void> {
     try {
       const { sheetUrl, clientId } = req.body;
 
@@ -146,6 +178,15 @@ export class LeadController {
       // Save conversion rates to database
       if (processingResult.conversionRatesGenerated > 0) {
         await conversionRateRepository.batchUpsertConversionRates(conversionData);
+        
+        // After processing new leads and updating conversion rates, recalculate lead scores
+        console.log(`Recalculating lead scores for client ${clientId} after sheet processing`);
+        try {
+          const scoreResult = await this.service.recalculateAllLeadScores(clientId);
+          console.log(`Updated ${scoreResult.updatedLeads} lead scores for client ${clientId}`);
+        } catch (scoreError: any) {
+          console.error(`Error updating lead scores after sheet processing:`, scoreError);
+        }
       }
 
       utils.sendSuccessResponse(res, 200, {
@@ -235,6 +276,7 @@ export class LeadController {
       });
     }
   }
+
 
   /**
    * Manual trigger for weekly conversion rate update (for testing)

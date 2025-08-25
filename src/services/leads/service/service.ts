@@ -28,7 +28,7 @@ import utils from "../../../utils/utils.js";
 
 type LeadKeyField = keyof Pick<
   ILead,
-  "service" | "adSetName" | "adName" | "leadDate"
+  "service" | "adSetName" | "adName" | "leadDate" | "zip"
 >;
 
 type UniqueKey = {
@@ -66,7 +66,264 @@ export interface SheetProcessingResult {
 };
 
 export class LeadService {
-  // ---------------- DATABASE OPERATIONS ----------------
+
+  private static readonly FIELD_WEIGHTS = {
+    service: 20,
+    adSetName: 20, 
+    adName: 20,
+    leadDate: 20,
+    zip: 20
+  } as const;
+
+  private calculateLeadScore(lead: ILead, conversionRates: IConversionRate[]): number {
+    if (!conversionRates || conversionRates.length === 0) {
+      return 0;
+    }
+
+    const serviceRate = this.getConversionRate(conversionRates, 'service', lead.service);
+    const adSetRate = this.getConversionRate(conversionRates, 'adSetName', lead.adSetName);
+    const adNameRate = this.getConversionRate(conversionRates, 'adName', lead.adName);
+    const dateRate = this.getDateConversionRate(conversionRates, lead.leadDate);
+    const zipRate = this.getConversionRate(conversionRates, 'zip', lead.zip || '');
+
+    const weightedScore = 
+      (serviceRate * LeadService.FIELD_WEIGHTS.service) +
+      (adSetRate * LeadService.FIELD_WEIGHTS.adSetName) +
+      (adNameRate * LeadService.FIELD_WEIGHTS.adName) +
+      (dateRate * LeadService.FIELD_WEIGHTS.leadDate) +
+      (zipRate * LeadService.FIELD_WEIGHTS.zip);
+
+    let finalScore = weightedScore / 100;
+    // Ensure score is between 0 and 100 and round to nearest integer
+    finalScore = Math.round(Math.max(0, Math.min(100, finalScore)));
+    
+    return finalScore;
+  }
+
+  /**
+   * Get conversion rate for specific field and value
+   */
+  private getConversionRate(conversionRates: IConversionRate[], field: string, value: string): number {
+    if (!value || value.trim() === '') return 0; // Handle empty values
+    
+    const rate = conversionRates.find(
+      cr => cr.keyField === field && cr.keyName === value
+    );
+    return rate?.conversionRate || 0;
+  }
+
+  /**
+   * Get date-based conversion rate (monthly)
+   */
+  private getDateConversionRate(conversionRates: IConversionRate[], leadDate: string): number {
+    const date = new Date(leadDate);
+    const monthName = date.toLocaleString("en-US", { month: "long" });
+    
+    return this.getConversionRate(conversionRates, 'leadDate', monthName);
+  }
+
+  /**
+   * Calculate and store lead scores for leads that don't have them
+   */
+  private async calculateAndStoreMissingLeadScores(
+    leads: ILeadDocument[], 
+    clientId: string
+  ): Promise<ILeadDocument[]> {
+    // Find leads without lead scores
+    const leadsWithoutScores = leads.filter(lead => 
+      typeof lead.leadScore === 'undefined' || lead.leadScore === null
+    );
+
+    if (leadsWithoutScores.length === 0) {
+      console.log(`All leads already have lead scores for client ${clientId}`);
+      return leads;
+    }
+
+    console.log(`Calculating lead scores for ${leadsWithoutScores.length} leads for client ${clientId}`);
+
+    try {
+      // Get conversion rates for this client
+      const conversionRates = await conversionRateRepository.getConversionRates({ clientId });
+      
+      if (conversionRates.length === 0) {
+        console.log(`No conversion rates found for client ${clientId}, setting lead scores to 0`);
+        
+        // Set all scores to 0 if no conversion rates exist
+        const bulkOps = leadsWithoutScores.map(lead => ({
+          updateOne: {
+            filter: { _id: lead._id },
+            update: { $set: { leadScore: 0 } }
+          }
+        }));
+
+        await LeadModel.bulkWrite(bulkOps);
+        
+        // Update the leads array with score 0
+        leads.forEach(lead => {
+          if (leadsWithoutScores.some(l => (l._id as any).toString() === (lead._id as any).toString())) {
+            lead.leadScore = 0;
+          }
+        });
+        
+        return leads;
+      }
+
+      // Calculate scores for leads without them
+      const bulkOps = leadsWithoutScores.map(lead => {
+        const leadScore = this.calculateLeadScore(lead, conversionRates);
+        return {
+          updateOne: {
+            filter: { _id: lead._id },
+            update: { $set: { leadScore } }
+          }
+        };
+      });
+
+      // Bulk update lead scores in database
+      await LeadModel.bulkWrite(bulkOps);
+      console.log(`Updated lead scores for ${bulkOps.length} leads`);
+
+      // Update the leads array with calculated scores
+      leads.forEach(lead => {
+        const leadWithoutScore = leadsWithoutScores.find(l => 
+          (l._id as any).toString() === (lead._id as any).toString()
+        );
+        if (leadWithoutScore) {
+          lead.leadScore = this.calculateLeadScore(lead, conversionRates);
+        }
+      });
+
+      return leads;
+    } catch (error: any) {
+      console.error(`Error calculating lead scores for client ${clientId}:`, error);
+      // Return leads as-is if calculation fails
+      return leads;
+    }
+  }
+
+  /**
+   * Recalculate ALL lead scores for a specific client (manual update function)
+   */
+  public async recalculateAllLeadScores(clientId: string): Promise<{
+    totalLeads: number;
+    updatedLeads: number;
+    errors: string[];
+  }> {
+    const errors: string[] = [];
+    
+    try {
+      console.log(`Starting lead score recalculation for client ${clientId}`);
+      
+      // Get all leads for this client
+      const allLeads = await LeadModel.find({ clientId }).lean().exec();
+      
+      if (allLeads.length === 0) {
+        return {
+          totalLeads: 0,
+          updatedLeads: 0,
+          errors: [`No leads found for client ${clientId}`]
+        };
+      }
+
+      // Get conversion rates for this client  
+      const conversionRates = await conversionRateRepository.getConversionRates({ clientId });
+      
+      if (conversionRates.length === 0) {
+        console.log(`No conversion rates found for client ${clientId}, setting all lead scores to 0`);
+        
+        await LeadModel.updateMany(
+          { clientId },
+          { $set: { leadScore: 0 } }
+        );
+        
+        return {
+          totalLeads: allLeads.length,
+          updatedLeads: allLeads.length,
+          errors: []
+        };
+      }
+
+      // Calculate new scores for all leads
+      const bulkOps = allLeads.map(lead => {
+        const leadScore = this.calculateLeadScore(lead, conversionRates);
+        return {
+          updateOne: {
+            filter: { _id: lead._id },
+            update: { $set: { leadScore } }
+          }
+        };
+      });
+
+      // Bulk update all lead scores
+      const result = await LeadModel.bulkWrite(bulkOps);
+      console.log(`Recalculated lead scores for ${result.modifiedCount} leads for client ${clientId}`);
+
+      return {
+        totalLeads: allLeads.length,
+        updatedLeads: result.modifiedCount,
+        errors: []
+      };
+    } catch (error: any) {
+      const errorMsg = `Error recalculating lead scores for client ${clientId}: ${error.message}`;
+      console.error(errorMsg);
+      errors.push(errorMsg);
+      
+      return {
+        totalLeads: 0,
+        updatedLeads: 0,
+        errors
+      };
+    }
+  }
+
+  /**
+   * Recalculate lead scores for ALL clients (batch operation)
+   */
+  public async recalculateAllLeadScoresForAllClients(): Promise<{
+    processedClients: number;
+    totalLeadsUpdated: number;
+    errors: string[];
+  }> {
+    const errors: string[] = [];
+    let totalLeadsUpdated = 0;
+    
+    try {
+      // Get all unique client IDs
+      const clientIds = await this.getAllClientIds();
+      console.log(`Starting lead score recalculation for ${clientIds.length} clients`);
+      
+      for (const clientId of clientIds) {
+        try {
+          const result = await this.recalculateAllLeadScores(clientId);
+          totalLeadsUpdated += result.updatedLeads;
+          errors.push(...result.errors);
+        } catch (error: any) {
+          const errorMsg = `Error processing client ${clientId}: ${error.message}`;
+          console.error(errorMsg);
+          errors.push(errorMsg);
+        }
+      }
+      
+      return {
+        processedClients: clientIds.length,
+        totalLeadsUpdated,
+        errors
+      };
+    } catch (error: any) {
+      const errorMsg = `Error in batch lead score recalculation: ${error.message}`;
+      console.error(errorMsg);
+      errors.push(errorMsg);
+      
+      return {
+        processedClients: 0,
+        totalLeadsUpdated: 0,
+        errors
+      };
+    }
+  }
+
+  // ---------------- UPDATED DATABASE OPERATIONS ----------------
+  
   public async getLeads(
     clientId?: string,
     startDate?: string,
@@ -79,13 +336,220 @@ export class LeadService {
     else if (startDate) query.leadDate = { $gte: startDate };
     else if (endDate) query.leadDate = { $lte: endDate };
 
-    // Optimized query with proper sorting for index usage
-    // Note: Ensure compound indexes exist on {clientId: 1, leadDate: 1} for optimal performance
-    return await LeadModel.find(query)
-      .sort({ leadDate: 1, _id: 1 }) // Consistent sorting for performance
-      .lean() // Return plain JS objects instead of Mongoose documents for better performance
+    // Get leads with optimized query
+    const leads = await LeadModel.find(query)
+      .sort({ leadDate: 1, _id: 1 })
+      .lean()
       .exec();
+
+    // Calculate and store missing lead scores automatically
+    if (clientId) {
+      return await this.calculateAndStoreMissingLeadScores(leads as ILeadDocument[], clientId);
+    }
+    
+    return leads as ILeadDocument[];
   }
+
+  // ---------------- UPDATED PROCESSING FUNCTIONS ----------------
+  
+  private getUniqueFieldValues(leads: ILead[]): UniqueKey[] {
+    // Use Maps for better performance with large datasets
+    const serviceSet = new Set<string>();
+    const adSetNameSet = new Set<string>();
+    const adNameSet = new Set<string>();
+    const monthSet = new Set<string>();
+    const zipSet = new Set<string>(); // NEW: ZIP code set
+
+    // Single pass through leads array for optimal performance
+    for (const lead of leads) {
+      if (lead.service) serviceSet.add(lead.service);
+      if (lead.adSetName) adSetNameSet.add(lead.adSetName);
+      if (lead.adName) adNameSet.add(lead.adName);
+      if (lead.zip && lead.zip.trim()) zipSet.add(lead.zip.trim()); // NEW: Add ZIP codes
+      
+      // Optimized month extraction
+      if (lead.leadDate) {
+        const monthName = this.getMonthlyName(lead.leadDate);
+        if (monthName) monthSet.add(monthName);
+      }
+    }
+
+    // Pre-allocate result array for better memory management
+    const result: UniqueKey[] = [];
+    
+    // Convert sets to UniqueKey objects efficiently
+    serviceSet.forEach(service => result.push({ value: service, field: "service" }));
+    adSetNameSet.forEach(adSetName => result.push({ value: adSetName, field: "adSetName" }));
+    adNameSet.forEach(adName => result.push({ value: adName, field: "adName" }));
+    monthSet.forEach(month => result.push({ value: month, field: "leadDate" }));
+    zipSet.forEach(zip => result.push({ value: zip, field: "zip" })); // NEW: Add ZIP field
+
+    return result;
+  }
+
+  private calculateConversionRate(
+    leads: ILead[],
+    clientId: string,
+    keyName: string,
+    keyField: LeadKeyField
+  ) {
+    // Pre-filter leads by clientId once for performance
+    const clientLeads = leads.filter((lead) => lead.clientId === clientId);
+    
+    let totalForKey = 0;
+    let yesForKey = 0;
+
+    if (keyField === "leadDate") {
+      const monthIndex = LeadService.monthMap[keyName.toLowerCase()];
+      if (monthIndex === undefined)
+        throw new Error(`Invalid month name: ${keyName}`);
+
+      // Single pass through leads for date filtering
+      for (const lead of clientLeads) {
+        const leadMonth = new Date(lead.leadDate).getMonth();
+        if (leadMonth === monthIndex) {
+          totalForKey++;
+          if (lead.status === 'estimate_set') {
+            yesForKey++;
+          }
+        }
+      }
+    } else if (keyField === "zip") { // NEW: Handle ZIP code conversion rates
+      // Single pass through leads for ZIP filtering
+      for (const lead of clientLeads) {
+        if (lead.zip && lead.zip.trim() === keyName) {
+          totalForKey++;
+          if (lead.status === 'estimate_set') {
+            yesForKey++;
+          }
+        }
+      }
+    } else {
+      // Single pass through leads for field filtering
+      for (const lead of clientLeads) {
+        if (lead[keyField] === keyName) {
+          totalForKey++;
+          if (lead.status === 'estimate_set') {
+            yesForKey++;
+          }
+        }
+      }
+    }
+
+    const conversionRate = totalForKey === 0 ? 0 : 
+      Math.floor((yesForKey / totalForKey) * 10000) / 100; // More precise rounding
+      
+    return {
+      conversionRate,
+      pastTotalCount: totalForKey,
+      pastTotalEst: yesForKey,
+    };
+  }
+
+  public processLeads(leads: ILead[], clientId: string) {
+    const result: {
+      clientId: string;
+      keyName: string;
+      keyField: LeadKeyField;
+      conversionRate: number;
+      pastTotalCount: number;
+      pastTotalEst: number;
+    }[] = [];
+
+    const allKeys = this.getUniqueFieldValues(leads);
+
+    for (const { value: keyName, field: keyField } of allKeys) {
+      const { conversionRate, pastTotalCount, pastTotalEst } =
+        this.calculateConversionRate(leads, clientId, keyName, keyField);
+      result.push({
+        clientId,
+        keyName,
+        keyField,
+        conversionRate,
+        pastTotalCount,
+        pastTotalEst,
+      });
+    }
+
+    return result;
+  }
+
+  // ---------------- UPDATED WEEKLY UPDATE FUNCTIONS ----------------
+  
+  /**
+   * Update conversion rates and recalculate lead scores for affected leads
+   */
+  public async updateConversionRatesWithWeeklyData(
+    clientId: string, 
+    weeklyLeads: ILead[]
+  ): Promise<IConversionRate[]> {
+    // Process new weekly leads to get new conversion data
+    const newWeeklyData = this.processLeads(weeklyLeads, clientId);
+    
+    if (newWeeklyData.length === 0) {
+      console.log(`No conversion data to process for client ${clientId}`);
+      return [];
+    }
+    
+    // Get existing conversion rates for this client
+    const existingRates = await conversionRateRepository.getConversionRates({ clientId });
+    
+    const ratesToUpsert: IConversionRate[] = [];
+
+    for (const newData of newWeeklyData) {
+      // Find existing rate for this key combination
+      const existingRate = existingRates.find(
+        rate => rate.keyField === newData.keyField && rate.keyName === newData.keyName
+      );
+
+      let updatedRate: IConversionRate;
+
+      if (existingRate) {
+        // Update existing rate with new weekly data
+        const totalCount = existingRate.pastTotalCount + newData.pastTotalCount;
+        const totalEst = existingRate.pastTotalEst + newData.pastTotalEst;
+        const conversionRate = Math.floor((totalCount === 0 ? 0 : totalEst / totalCount) * 100) / 100;
+
+        updatedRate = {
+          clientId,
+          keyName: newData.keyName,
+          keyField: newData.keyField,
+          conversionRate,
+          pastTotalCount: totalCount,
+          pastTotalEst: totalEst
+        };
+      } else {
+        // Create new rate if it doesn't exist
+        updatedRate = {
+          clientId: newData.clientId,
+          keyName: newData.keyName,
+          keyField: newData.keyField,
+          conversionRate: newData.conversionRate,
+          pastTotalCount: newData.pastTotalCount,
+          pastTotalEst: newData.pastTotalEst
+        };
+      }
+
+      ratesToUpsert.push(updatedRate);
+    }
+
+    // Batch upsert all conversion rates at once
+    const upsertedRates = await conversionRateRepository.batchUpsertConversionRates(ratesToUpsert);
+    console.log(`Batch upserted ${upsertedRates.length} conversion rates for client ${clientId}`);
+    
+    // After updating conversion rates, recalculate lead scores for this client
+    try {
+      console.log(`Recalculating lead scores after conversion rate update for client ${clientId}`);
+      const scoreUpdateResult = await this.recalculateAllLeadScores(clientId);
+      console.log(`Updated ${scoreUpdateResult.updatedLeads} lead scores for client ${clientId}`);
+    } catch (error: any) {
+      console.error(`Error updating lead scores after conversion rate update for client ${clientId}:`, error);
+    }
+    
+    return upsertedRates;
+  }
+  // ---------------- DATABASE OPERATIONS ----------------
+  
 
 
   public async createLead(payload: ILead): Promise<ILeadDocument> {
@@ -548,38 +1012,6 @@ public async fetchLeadsFromSheet(
     return result;
   }
 
-  private getUniqueFieldValues(leads: ILead[]): UniqueKey[] {
-    // Use Maps for better performance with large datasets
-    const serviceSet = new Set<string>();
-    const adSetNameSet = new Set<string>();
-    const adNameSet = new Set<string>();
-    const monthSet = new Set<string>();
-    
-    // Single pass through leads array for optimal performance
-    for (const lead of leads) {
-      if (lead.service) serviceSet.add(lead.service);
-      if (lead.adSetName) adSetNameSet.add(lead.adSetName);
-      if (lead.adName) adNameSet.add(lead.adName);
-      
-      // Optimized month extraction
-      if (lead.leadDate) {
-        const monthName = this.getMonthlyName(lead.leadDate);
-        if (monthName) monthSet.add(monthName);
-      }
-    }
-
-    // Pre-allocate result array for better memory management
-    const result: UniqueKey[] = [];
-    
-    // Convert sets to UniqueKey objects efficiently
-    serviceSet.forEach(service => result.push({ value: service, field: "service" }));
-    adSetNameSet.forEach(adSetName => result.push({ value: adSetName, field: "adSetName" }));
-    adNameSet.forEach(adName => result.push({ value: adName, field: "adName" }));
-    monthSet.forEach(month => result.push({ value: month, field: "leadDate" }));
-    
-    return result;
-  }
-
   // Static month map for better performance
   private static readonly monthMap: Record<string, number> = {
     january: 0,
@@ -596,85 +1028,6 @@ public async fetchLeadsFromSheet(
     december: 11,
   };
 
-  private calculateConversionRate(
-    leads: ILead[],
-    clientId: string,
-    keyName: string,
-    keyField: LeadKeyField
-  ) {
-    // Pre-filter leads by clientId once for performance
-    const clientLeads = leads.filter((lead) => lead.clientId === clientId);
-    
-    let totalForKey = 0;
-    let yesForKey = 0;
-
-    if (keyField === "leadDate") {
-      const monthIndex = LeadService.monthMap[keyName.toLowerCase()];
-      if (monthIndex === undefined)
-        throw new Error(`Invalid month name: ${keyName}`);
-
-      // Single pass through leads for date filtering
-      for (const lead of clientLeads) {
-        const leadMonth = new Date(lead.leadDate).getMonth();
-        if (leadMonth === monthIndex) {
-          totalForKey++;
-          if (lead.status === 'estimate_set') {
-            yesForKey++;
-          }
-        }
-      }
-    } else {
-      // Single pass through leads for field filtering
-      for (const lead of clientLeads) {
-        if (lead[keyField] === keyName) {
-          totalForKey++;
-          if (lead.status === 'estimate_set') {
-            yesForKey++;
-          }
-        }
-      }
-    }
-
-    const conversionRate = totalForKey === 0 ? 0 : 
-      Math.floor((yesForKey / totalForKey) * 10000) / 100; // More precise rounding
-      
-    return {
-      conversionRate,
-      pastTotalCount: totalForKey,
-      pastTotalEst: yesForKey,
-    };
-  }
-
-  public processLeads(leads: ILead[], clientId: string) {
-    const result: {
-      clientId: string;
-      keyName: string;
-      keyField: LeadKeyField;
-      conversionRate: number;
-      pastTotalCount: number;
-      pastTotalEst: number;
-    }[] = [];
-
-    const allKeys = this.getUniqueFieldValues(leads);
-
-    for (const { value: keyName, field: keyField } of allKeys) {
-      const { conversionRate, pastTotalCount, pastTotalEst } =
-        this.calculateConversionRate(leads, clientId, keyName, keyField);
-      result.push({
-        clientId,
-        keyName,
-        keyField,
-        conversionRate,
-        pastTotalCount,
-        pastTotalEst,
-      });
-    }
-
-    return result;
-  }
-
-  // ---------------- WEEKLY UPDATE FUNCTIONS ----------------
-
   /**
    * Get all unique client IDs from leads collection
    */
@@ -687,66 +1040,6 @@ public async fetchLeadsFromSheet(
    * Update conversion rates by adding new weekly data to existing data
    * Now uses batch operations for better performance
    */
-  public async updateConversionRatesWithWeeklyData(
-    clientId: string, 
-    weeklyLeads: ILead[]
-  ): Promise<IConversionRate[]> {
-    // Process new weekly leads to get new conversion data
-    const newWeeklyData = this.processLeads(weeklyLeads, clientId);
-    
-    if (newWeeklyData.length === 0) {
-      console.log(`No conversion data to process for client ${clientId}`);
-      return [];
-    }
-    
-    // Get existing conversion rates for this client
-    const existingRates = await conversionRateRepository.getConversionRates({ clientId });
-    
-    const ratesToUpsert: IConversionRate[] = [];
-
-    for (const newData of newWeeklyData) {
-      // Find existing rate for this key combination
-      const existingRate = existingRates.find(
-        rate => rate.keyField === newData.keyField && rate.keyName === newData.keyName
-      );
-
-      let updatedRate: IConversionRate;
-
-      if (existingRate) {
-        // Update existing rate with new weekly data
-        const totalCount = existingRate.pastTotalCount + newData.pastTotalCount;
-        const totalEst = existingRate.pastTotalEst + newData.pastTotalEst;
-        const conversionRate = Math.floor((totalCount === 0 ? 0 : totalEst / totalCount) * 100) / 100;
-
-        updatedRate = {
-          clientId,
-          keyName: newData.keyName,
-          keyField: newData.keyField,
-          conversionRate,
-          pastTotalCount: totalCount,
-          pastTotalEst: totalEst
-        };
-      } else {
-        // Create new rate if it doesn't exist
-        updatedRate = {
-          clientId: newData.clientId,
-          keyName: newData.keyName,
-          keyField: newData.keyField,
-          conversionRate: newData.conversionRate,
-          pastTotalCount: newData.pastTotalCount,
-          pastTotalEst: newData.pastTotalEst
-        };
-      }
-
-      ratesToUpsert.push(updatedRate);
-    }
-
-    // Batch upsert all conversion rates at once - much more efficient!
-    const upsertedRates = await conversionRateRepository.batchUpsertConversionRates(ratesToUpsert);
-    console.log(`Batch upserted ${upsertedRates.length} conversion rates for client ${clientId}`);
-    
-    return upsertedRates;
-  }
 
   /**
    * Process weekly conversion rate updates for all clients
