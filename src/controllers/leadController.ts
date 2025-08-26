@@ -16,8 +16,7 @@ export class LeadController {
     try {
       // Get all unique clientIds from leads collection
       
-      // const clientIds = await this.service.getAllClientIds();
-      const clientIds = ["68a6cb20e9e637bec3d771ce"]
+      const clientIds = await this.service.getAllClientIds();
       if (!clientIds || clientIds.length === 0) {
         utils.sendErrorResponse(res, "No clientIds found in leads collection");
         return;
@@ -28,14 +27,6 @@ export class LeadController {
         try {
           console.log(`[API] Processing clientId: ${clientId}`);
           const result = await this.service.updateConversionRatesAndLeadScoresForClient(clientId);
-          const conversionRates = await conversionRateRepository.getConversionRates({ clientId });
-          const conversionRateInsights = {
-            uniqueServices: [...new Set(conversionRates.filter(d => d.keyField === 'service').map(d => d.keyName))],
-            uniqueAdSets: [...new Set(conversionRates.filter(d => d.keyField === 'adSetName').map(d => d.keyName))],
-            uniqueAdNames: [...new Set(conversionRates.filter(d => d.keyField === 'adName').map(d => d.keyName))],
-            uniqueMonths: [...new Set(conversionRates.filter(d => d.keyField === 'leadDate').map(d => d.keyName))],
-            uniqueZips: [...new Set(conversionRates.filter(d => d.keyField === 'zip').map(d => d.keyName))]
-          };
           const updatedLeads = await this.service.getLeads(clientId);
 
           results.push({
@@ -45,11 +36,6 @@ export class LeadController {
               updatedLeads: result.updatedLeads,
               updatedConversionRates: result.updatedConversionRates,
               errors: result.errors
-            },
-            conversionRates: {
-              conversionRatesGenerated: result.updatedConversionRates,
-              insights: conversionRateInsights,
-              conversionRates: conversionRates
             },
             summary: {
               processingSuccessRate: updatedLeads.length > 0 ? `${((result.updatedLeads / updatedLeads.length) * 100).toFixed(1)}%` : '0%',

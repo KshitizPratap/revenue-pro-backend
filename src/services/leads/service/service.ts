@@ -502,8 +502,9 @@ export class LeadService {
       }
     }
 
-    const conversionRate = totalForKey === 0 ? 0 : 
-      Math.floor((yesForKey / totalForKey) * 10000) / 100; // More precise rounding
+      // Conversion rate as decimal, rounded to 2 decimals
+      const conversionRate = totalForKey === 0 ? 0 :
+        Math.round((yesForKey / totalForKey) * 100) / 100;
       
     return {
       conversionRate,
