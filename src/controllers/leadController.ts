@@ -17,7 +17,7 @@ export class LeadController {
       // Get all unique clientIds from leads collection
       
       // const clientIds = await this.service.getAllClientIds();
-      const clientIds = ["68a6cc75e9e637bec3d7723a"]
+      const clientIds = ["68a6cb20e9e637bec3d771ce"]
       if (!clientIds || clientIds.length === 0) {
         utils.sendErrorResponse(res, "No clientIds found in leads collection");
         return;
