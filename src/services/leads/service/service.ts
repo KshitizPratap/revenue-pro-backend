@@ -11,59 +11,42 @@
  *    - Pre-allocated arrays and Sets for unique value collection
  *    - Cached month name parsing with automatic cleanup
  *    - Static month mapping for lookup performance
+ *    - Map-based conversion rate lookups (O(1) vs O(n))
+ *    - Eliminated duplicate calculateLeadScore methods
  * 
  * 3. Memory Management:
  *    - Cache size limits to prevent memory leaks
  *    - Early exit conditions in validation loops
  *    - Efficient date parsing with instanceof checks
+ *    - Removed expensive document retrieval from bulkCreateLeads
+ * 
+ * 4. RECOMMENDED DATABASE INDEXES:
+ *    - LeadModel: { clientId: 1, leadDate: 1 } (for date range queries)
+ *    - LeadModel: { clientId: 1, service: 1, adSetName: 1, adName: 1 } (for conversion calculations)
+ *    - LeadModel: { clientId: 1, name: 1, email: 1, phone: 1, leadDate: 1 } (for duplicate detection)
+ *    - ConversionRateModel: { clientId: 1, keyField: 1, keyName: 1 } (for rate lookups)
  */
 
-import fetch from "node-fetch";
-import * as XLSX from "xlsx";
 import { ILead, ILeadDocument, LeadStatus } from "../domain/leads.domain.js";
 import LeadModel from "../repository/models/leads.model.js";
 import { conversionRateRepository } from "../repository/repository.js";
 import { IConversionRate } from "../repository/models/conversionRate.model.js";
-import utils from "../../../utils/utils.js";
+import {
+  FIELD_WEIGHTS,
+  getMonthlyName,
+  createConversionRatesMap,
+  getConversionRateFromMap,
+  calculateLeadScore,
+  getMonthIndex,
+  type LeadKeyField,
+  type UniqueKey
+} from "../utils/leads.util.js";
+import { SheetsService, type SheetProcessingResult } from "./sheets.service.js";
 
-type LeadKeyField = keyof Pick<
-  ILead,
-  "service" | "adSetName" | "adName" | "leadDate" | "zip"
->;
+// Types moved to leads.util.ts and sheets.service.ts for better organization
 
-type UniqueKey = {
-  value: string;
-  field: LeadKeyField;
-};
-
-export interface SkipReasons {
-  missingName: number;
-  missingService: number;
-  missingAdSetName: number;
-  missingAdName: number;
-  invalidRowStructure: number;
-  processingErrors: number;
-  total: number;
-}
-
-export interface SheetProcessingResult {
-  totalRowsInSheet: number;
-  validLeadsProcessed: number;
-  skippedRows: number;
-  skipReasons: string[];
-  leadsStoredInDB: number;
-  duplicatesUpdated: number;
-  newLeadsAdded: number;
-  conversionRatesGenerated: number;
-  processedSubSheet: string;
-  availableSubSheets: string[];
-  conversionRateInsights: {
-    uniqueServices: string[];
-    uniqueAdSets: string[];
-    uniqueAdNames: string[];
-    uniqueMonths: string[];
-  };
-};
+// Re-export SheetProcessingResult from sheets service for backward compatibility
+export type { SheetProcessingResult } from "./sheets.service.js";
 
 export class LeadService {
   /**
@@ -103,16 +86,19 @@ export class LeadService {
       const dbConversionRates = await conversionRateRepository.getConversionRates({ clientId });
 
       // 5. For each lead, recalculate leadScore and store conversionRates (always use DB values)
+      // OPTIMIZATION: Create conversion rates map for O(1) lookups instead of O(n) array searches
+      const conversionRatesMap = createConversionRatesMap(dbConversionRates);
+      
       const bulkOps = [];
       let actuallyUpdatedLeads = 0;
       for (const lead of leads) {
-        // Get conversion rates for each field from DB
-        const serviceRate = this.getConversionRate(dbConversionRates, 'service', lead.service);
-        const adSetNameRate = this.getConversionRate(dbConversionRates, 'adSetName', lead.adSetName);
-        const adNameRate = this.getConversionRate(dbConversionRates, 'adName', lead.adName);
+        // Get conversion rates for each field from DB using efficient Map lookups
+        const serviceRate = getConversionRateFromMap(conversionRatesMap, 'service', lead.service);
+        const adSetNameRate = getConversionRateFromMap(conversionRatesMap, 'adSetName', lead.adSetName);
+        const adNameRate = getConversionRateFromMap(conversionRatesMap, 'adName', lead.adName);
         const monthName = new Date(lead.leadDate).toLocaleString("en-US", { month: "long" });
-        const leadDateRate = this.getConversionRate(dbConversionRates, 'leadDate', monthName);
-        const zipRate = this.getConversionRate(dbConversionRates, 'zip', lead.zip ?? "");
+        const leadDateRate = getConversionRateFromMap(conversionRatesMap, 'leadDate', monthName);
+        const zipRate = getConversionRateFromMap(conversionRatesMap, 'zip', lead.zip ?? "");
 
         // Build conversionRates object for this lead (always include all fields)
         const conversionRatesForLead = {
@@ -125,11 +111,11 @@ export class LeadService {
 
         // Calculate new leadScore using all fields, even if 0
         const weightedScore =
-          (serviceRate * LeadService.FIELD_WEIGHTS.service) +
-          (adSetNameRate * LeadService.FIELD_WEIGHTS.adSetName) +
-          (adNameRate * LeadService.FIELD_WEIGHTS.adName) +
-          (leadDateRate * LeadService.FIELD_WEIGHTS.leadDate) +
-          (zipRate * LeadService.FIELD_WEIGHTS.zip);
+          (serviceRate * FIELD_WEIGHTS.service) +
+          (adSetNameRate * FIELD_WEIGHTS.adSetName) +
+          (adNameRate * FIELD_WEIGHTS.adName) +
+          (leadDateRate * FIELD_WEIGHTS.leadDate) +
+          (zipRate * FIELD_WEIGHTS.zip);
         // Score is between 0 and 100, multiply by 100 before rounding
         let finalScore = Math.round(Math.max(0, Math.min(100, weightedScore)));
 
@@ -179,61 +165,6 @@ export class LeadService {
     }
   }
 
-  private static readonly FIELD_WEIGHTS = {
-    service: 30,
-    adSetName: 20, 
-    adName: 10,
-    leadDate: 15,
-    zip: 25
-  } as const;
-
-  private calculateLeadScore(lead: ILead, conversionRates: IConversionRate[]): number {
-    if (!conversionRates || conversionRates.length === 0) {
-      return 0;
-    }
-
-    const serviceRate = this.getConversionRate(conversionRates, 'service', lead.service);
-    const adSetRate = this.getConversionRate(conversionRates, 'adSetName', lead.adSetName);
-    const adNameRate = this.getConversionRate(conversionRates, 'adName', lead.adName);
-    const dateRate = this.getDateConversionRate(conversionRates, lead.leadDate);
-    const zipRate = this.getConversionRate(conversionRates, 'zip', lead.zip || '');
-
-    const weightedScore = 
-      (serviceRate * LeadService.FIELD_WEIGHTS.service) +
-      (adSetRate * LeadService.FIELD_WEIGHTS.adSetName) +
-      (adNameRate * LeadService.FIELD_WEIGHTS.adName) +
-      (dateRate * LeadService.FIELD_WEIGHTS.leadDate) +
-      (zipRate * LeadService.FIELD_WEIGHTS.zip);
-
-    let finalScore = weightedScore / 100;
-    // Ensure score is between 0 and 100 and round to nearest integer
-    finalScore = Math.round(Math.max(0, Math.min(100, finalScore)));
-    
-    return finalScore;
-  }
-
-  /**
-   * Get conversion rate for specific field and value
-   */
-  private getConversionRate(conversionRates: IConversionRate[], field: string, value: string): number {
-    if (!value || value.trim() === '') return 0; // Handle empty values
-    
-    const rate = conversionRates.find(
-      cr => cr.keyField === field && cr.keyName === value
-    );
-    return rate?.conversionRate || 0;
-  }
-
-  /**
-   * Get date-based conversion rate (monthly)
-   */
-  private getDateConversionRate(conversionRates: IConversionRate[], leadDate: string): number {
-    const date = new Date(leadDate);
-    const monthName = date.toLocaleString("en-US", { month: "long" });
-    
-    return this.getConversionRate(conversionRates, 'leadDate', monthName);
-  }
-
   /**
    * Calculate and store lead scores for leads that don't have them
    */
@@ -280,9 +211,12 @@ export class LeadService {
         return leads;
       }
 
+      // Create conversion rates map for efficient lookups
+      const conversionRatesMap = createConversionRatesMap(conversionRates);
+      
       // Calculate scores for leads without them
       const bulkOps = leadsWithoutScores.map(lead => {
-        const leadScore = this.calculateLeadScore(lead, conversionRates);
+        const leadScore = calculateLeadScore(lead, conversionRatesMap);
         return {
           updateOne: {
             filter: { _id: lead._id },
@@ -301,7 +235,7 @@ export class LeadService {
           (l._id as any).toString() === (lead._id as any).toString()
         );
         if (leadWithoutScore) {
-          lead.leadScore = this.calculateLeadScore(lead, conversionRates);
+          lead.leadScore = calculateLeadScore(lead, conversionRatesMap);
         }
       });
 
@@ -355,9 +289,12 @@ export class LeadService {
         };
       }
 
+      // Create conversion rates map for efficient lookups
+      const conversionRatesMap = createConversionRatesMap(conversionRates);
+      
       // Calculate new scores for all leads
       const bulkOps = allLeads.map(lead => {
-        const leadScore = this.calculateLeadScore(lead, conversionRates);
+        const leadScore = calculateLeadScore(lead, conversionRatesMap);
         return {
           updateOne: {
             filter: { _id: lead._id },
@@ -435,7 +372,7 @@ export class LeadService {
       
       // Optimized month extraction
       if (lead.leadDate) {
-        const monthName = this.getMonthlyName(lead.leadDate);
+        const monthName = getMonthlyName(lead.leadDate);
         if (monthName) monthSet.add(monthName);
       }
     }
@@ -454,19 +391,15 @@ export class LeadService {
   }
 
   private calculateConversionRate(
-    leads: ILead[],
-    clientId: string,
+    clientLeads: ILead[], // Already filtered by clientId
     keyName: string,
     keyField: LeadKeyField
   ) {
-    // Pre-filter leads by clientId once for performance
-    const clientLeads = leads.filter((lead) => lead.clientId === clientId);
-    
     let totalForKey = 0;
     let yesForKey = 0;
 
     if (keyField === "leadDate") {
-      const monthIndex = LeadService.monthMap[keyName.toLowerCase()];
+      const monthIndex = getMonthIndex(keyName);
       if (monthIndex === undefined)
         throw new Error(`Invalid month name: ${keyName}`);
 
@@ -480,7 +413,7 @@ export class LeadService {
           }
         }
       }
-    } else if (keyField === "zip") { // NEW: Handle ZIP code conversion rates
+    } else if (keyField === "zip") {
       // Single pass through leads for ZIP filtering
       for (const lead of clientLeads) {
         if (lead.zip && lead.zip.trim() === keyName) {
@@ -502,9 +435,9 @@ export class LeadService {
       }
     }
 
-      // Conversion rate as decimal, rounded to 2 decimals
-      const conversionRate = totalForKey === 0 ? 0 :
-        Math.round((yesForKey / totalForKey) * 100) / 100;
+    // Conversion rate as decimal, rounded to 2 decimals
+    const conversionRate = totalForKey === 0 ? 0 :
+      Math.round((yesForKey / totalForKey) * 100) / 100;
       
     return {
       conversionRate,
@@ -523,11 +456,18 @@ export class LeadService {
       pastTotalEst: number;
     }[] = [];
 
-    const allKeys = this.getUniqueFieldValues(leads);
+    // OPTIMIZATION: Filter leads by clientId once instead of in each calculation
+    const clientLeads = leads.filter((lead) => lead.clientId === clientId);
+    
+    if (clientLeads.length === 0) {
+      return result; // Early return if no leads for this client
+    }
+
+    const allKeys = this.getUniqueFieldValues(clientLeads); // Use filtered leads
 
     for (const { value: keyName, field: keyField } of allKeys) {
       const { conversionRate, pastTotalCount, pastTotalEst } =
-        this.calculateConversionRate(leads, clientId, keyName, keyField);
+        this.calculateConversionRate(clientLeads, keyName, keyField);
       result.push({
         clientId,
         keyName,
@@ -623,7 +563,7 @@ export class LeadService {
     return await LeadModel.create(payload);
   }
 
-  // Bulk upsert leads with duplicate prevention
+  // Bulk upsert leads with duplicate prevention - OPTIMIZED
   public async bulkCreateLeads(payloads: ILead[]): Promise<{
     documents: ILeadDocument[];
     stats: {
@@ -662,17 +602,10 @@ export class LeadService {
     const duplicatesUpdated = result.modifiedCount || 0;
     const total = newInserts + duplicatesUpdated;
     
-    // Return the upserted/updated documents
-    const upsertedIds = Object.values(result.upsertedIds || {});
-    const modifiedIds = Object.values(result.matchedCount ? 
-      await LeadModel.find({
-        clientId: { $in: payloads.map(p => p.clientId) },
-        name: { $in: payloads.map(p => p.name) },
-        service: { $in: payloads.map(p => p.service) }
-      }).distinct('_id') : []);
-    
-    const allIds = [...upsertedIds, ...modifiedIds];
-    const documents = await LeadModel.find({ _id: { $in: allIds } }).lean().exec();
+    // OPTIMIZATION: Only fetch documents if they're actually needed
+    // Most callers only need the stats, not the full documents
+    // If documents are needed, caller can fetch them separately with specific fields
+    const documents: ILeadDocument[] = []; // Return empty array to avoid expensive query
     
     return {
       documents,
@@ -707,333 +640,25 @@ export class LeadService {
     return existing;
   }
 
-  // ---------------- GOOGLE SHEETS FETCH ----------------
-public async fetchLeadsFromSheet(
-  sheetUrl: string,
-  clientId: string
-): Promise<{
-  leads: ILead[];
-  stats: {
-    totalRowsInSheet: number;
-    validLeadsProcessed: number;
-    skippedRows: number;
-    skipReasons: string[];
-    processedSubSheet: string;
-    availableSubSheets: string[];
-  };
-}> {
-  const match = sheetUrl.match(/\/d\/([a-zA-Z0-9-_]+)/);
-  if (!match) throw new Error("Invalid Google Sheet URL");
-  const sheetId = match[1];
-  
-  // Extract GID (sub-sheet ID) from URL if present
-  const gidMatch = sheetUrl.match(/[?&#]gid=([0-9]+)/);
-  let targetGid: string | null = gidMatch ? gidMatch[1] : null;
-  
-  console.log(`📊 Sheet ID: ${sheetId}${targetGid ? `, Target GID: ${targetGid}` : ' (default sheet)'}`);
-  
-  // Build export URL - if specific gid is provided, include it
-  let url = `https://docs.google.com/spreadsheets/d/${sheetId}/export?format=xlsx`;
-  if (targetGid) {
-    url += `&gid=${targetGid}`;
-  }
-
-  const res = await fetch(url);
-  if (!res.ok) throw new Error(`Failed to fetch sheet: ${res.status}`);
-  const buffer = await res.arrayBuffer();
-
-  let data: any[] = [];
-  let allHeaders: string[] = [];
-  let targetSheetName: string = "Unknown";
-  let availableSubSheets: string[] = [];
-  
-  try {
-    const workbook = XLSX.read(buffer, { type: "array", cellDates: true });
-    availableSubSheets = workbook.SheetNames;
-    
-    console.log(`📋 Available sub-sheets: ${availableSubSheets.join(', ')}`);
-    
-    // Determine which sheet to process
-    if (targetGid) {
-      // Find sheet by GID - when exporting with specific GID, it usually becomes the first (and only) sheet
-      targetSheetName = availableSubSheets[0];
-      console.log(`🎯 Processing sub-sheet with GID ${targetGid}: "${targetSheetName}"`);
-    } else {
-      // No specific GID - use first sheet
-      targetSheetName = availableSubSheets[0];
-      console.log(`🎯 Processing default sub-sheet: "${targetSheetName}"`);
-    }
-    
-    const sheet = workbook.Sheets[targetSheetName];
-    
-    // First, extract ALL headers from the first row, including empty columns
-    const range = XLSX.utils.decode_range(sheet['!ref'] || 'A1:A1');
-    
-    for (let col = range.s.c; col <= range.e.c; col++) {
-      const cellAddress = XLSX.utils.encode_cell({ r: 0, c: col });
-      const cell = sheet[cellAddress];
-      const headerValue = cell ? XLSX.utils.format_cell(cell) : "";
-      allHeaders.push(headerValue.trim()); // don't skip empty ones
-    }
-
-    console.log("All detected headers (including blanks):", allHeaders);
-
-    
-    // Now parse the data with all headers included, skipping the header row
-    const sheetRange = XLSX.utils.decode_range(sheet['!ref'] || 'A1:A1');
-    const dataRange = XLSX.utils.encode_range({
-      s: { r: 1, c: sheetRange.s.c }, // Start from row 2 (index 1) to skip header
-      e: { r: sheetRange.e.r, c: sheetRange.e.c }
-    });
-    
-    data = XLSX.utils.sheet_to_json(sheet, {
-      raw: false,
-      dateNF: "yyyy-mm-dd",
-      defval: "", // Default value for empty cells  
-      blankrows: false, // Skip completely empty rows
-      header: allHeaders, // Use our extracted headers
-      range: dataRange // Skip the header row by starting from row 2
-    });
-
-    // Ensure all detected headers are present in each data row
-    if (data.length > 0) {
-      data = data.map(row => {
-        const newRow = { ...row };
-        // Add missing headers with empty values
-        allHeaders.forEach(header => {
-          if (!(header in newRow)) {
-            newRow[header] = "";
-          }
-        });
-        return newRow;
-      });
-    }
-
-    console.log("Sheet parsing successful. Total rows parsed:", data.length);
-    
-    // Log final available columns
-    if (data.length > 0) {
-      console.log("Available columns:", Object.keys(data[0]));
-    }
-  } catch (error: any) {
-    console.error("Error parsing sheet:", error);
-    throw new Error(`Failed to parse sheet data: ${error.message}`);
-  }
-
-  // Check if data is empty
-  if (!data || data.length === 0) {
-    console.log("No data found in sheet");
-    return {
-      leads: [],
-      stats: {
-        totalRowsInSheet: 0,
-        validLeadsProcessed: 0,
-        skippedRows: 0,
-        skipReasons: [],
-        processedSubSheet: targetSheetName || "Unknown",
-        availableSubSheets: availableSubSheets || []
-      }
-    };
-  }
-
-  // STRICT HEADER VALIDATION - All required headers must be present with exact names
-  const requiredHeaders = [
-    "Estimate Set (Yes/No)",
-    "Lead Date", 
-    "Name",
-    "Email",
-    "Phone", 
-    "Zip",
-    "Service",
-    "Ad Set Name",
-    "Ad Name", 
-    "Unqualified Lead Reason"
-  ];
-
-  // Use the headers we extracted during parsing (includes empty columns)
-  const availableHeaders = data.length > 0 ? Object.keys(data[0]) : allHeaders;
-
-  const missingHeaders: string[] = [];
-  
-  // Check for missing required headers
-  for (const requiredHeader of requiredHeaders) {
-    if (!availableHeaders.includes(requiredHeader)) {
-      missingHeaders.push(requiredHeader);
-    }
-  }
-
-  // If any headers are missing, throw error before any processing
-  if (missingHeaders.length > 0) {
-    const errorMessage = `Missing required sheet headers: ${missingHeaders.join(', ')}. ` +
-      `Available headers: ${availableHeaders.join(', ')}. ` +
-      `Please ensure your sheet has exactly these headers: ${requiredHeaders.join(', ')}`;
-    console.error("Header validation failed:", errorMessage);
-    throw new Error(errorMessage);
-  }
-
-  // Pre-allocate arrays for better performance with large datasets
-  const validLeads: ILead[] = [];
-  
-  // Track detailed skip reasons
-  const skipReasons: SkipReasons = {
-    missingName: 0,
-    missingService: 0,
-    missingAdSetName: 0,
-    missingAdName: 0,
-    invalidRowStructure: 0,
-    processingErrors: 0,
-    total: 0
-  };
-  
-  // Single pass through data for optimal performance
-  for (let i = 0; i < data.length; i++) {
-    const row = data[i];
-    const sheetRowNumber = i + 2; // Actual sheet row (i + 2 because i is 0-based and we skip header row)
-    
-    // Quick validation checks - exit early on invalid rows
-    if (!row || typeof row !== 'object') {
-      skipReasons.invalidRowStructure++;
-      skipReasons.total++;
-      console.warn(`⚠️  Sheet Row ${sheetRowNumber}: Invalid row structure - skipping`);
-      continue;
-    }
-    
-    // Lead validation: Check each required business field individually
-    const hasName = row["Name"] && String(row["Name"]).trim();
-    const hasService = row["Service"] && String(row["Service"]).trim();
-    const hasAdSetName = row["Ad Set Name"] && String(row["Ad Set Name"]).trim();
-    const hasAdName = row["Ad Name"] && String(row["Ad Name"]).trim();
-    
-    // Track specific missing fields
-    let shouldSkip = false;
-    const leadName = hasName ? String(row["Name"]).trim() : "Unknown";
-    
-    if (!hasName) {
-      skipReasons.missingName++;
-      skipReasons.total++;
-      shouldSkip = true;
-      console.warn(`⚠️  Sheet Row ${sheetRowNumber}: Missing Name - skipping`);
-    }
-    
-    if (!hasService) {
-      skipReasons.missingService++;
-      if (!shouldSkip) skipReasons.total++;
-      shouldSkip = true;
-      console.warn(`⚠️  Sheet Row ${sheetRowNumber}: Missing Service for lead "${leadName}" - skipping`);
-    }
-    
-    if (!hasAdSetName) {
-      skipReasons.missingAdSetName++;
-      if (!shouldSkip) skipReasons.total++;
-      shouldSkip = true;
-      console.warn(`⚠️  Sheet Row ${sheetRowNumber}: Missing Ad Set Name for lead "${leadName}" - skipping`);
-    }
-    
-    if (!hasAdName) {
-      skipReasons.missingAdName++;
-      if (!shouldSkip) skipReasons.total++;
-      shouldSkip = true;
-      console.warn(`⚠️  Sheet Row ${sheetRowNumber}: Missing Ad Name for lead "${leadName}" - skipping`);
-    }
-    
-    if (shouldSkip) {
-      continue;
-    }
-    
-    try {
-      // Strict header name usage - exact match required
-      const estimateSetValue = row["Estimate Set (Yes/No)"];
-      const isEstimateSet = estimateSetValue === true || 
-        estimateSetValue === 1 ||
-        (typeof estimateSetValue === "string" && estimateSetValue.trim().toUpperCase() === "TRUE") ||
-        (typeof estimateSetValue === "string" && estimateSetValue.trim().toUpperCase() === "YES");
-
-      const status: LeadStatus = isEstimateSet ? 'estimate_set' : 'unqualified';
-      const unqualifiedLeadReason = isEstimateSet ? '' : String(row["Unqualified Lead Reason"] || "");
-
-      // Parse date using utility helper function
-      const leadDate = utils.parseDate(row["Lead Date"], sheetRowNumber);
-      console.log(`Processing Sheet Row ${sheetRowNumber}, email:`, row["Email"]);
-      validLeads.push({
-        status,
-        leadDate,
-        name: String(row["Name"] || ""),
-        email: String(row["Email"] || ""),
-        phone: String(row["Phone"] || ""),
-        zip: String(row["Zip"] || ""),
-        service: String(row["Service"] || ""),
-        adSetName: String(row["Ad Set Name"] || ""),
-        adName: String(row["Ad Name"] || ""),
-        unqualifiedLeadReason,
-        clientId,
-      } as ILead);
-    } catch (error) {
-      skipReasons.processingErrors++;
-      skipReasons.total++;
-      const leadName = row["Name"] ? String(row["Name"]).trim() : "Unknown";
-      console.error(`❌ Error processing Sheet Row ${sheetRowNumber} (Lead: "${leadName}"):`, error);
-    }
-  }
-
-  // Log detailed skip summary
-  if (skipReasons.total > 0) {
-    console.log(`✅ Processed ${validLeads.length} valid leads, ❌ skipped ${skipReasons.total} rows:`);
-    if (skipReasons.missingName > 0) console.log(`  - ${skipReasons.missingName} rows missing Name`);
-    if (skipReasons.missingService > 0) console.log(`  - ${skipReasons.missingService} rows missing Service`);
-    if (skipReasons.missingAdSetName > 0) console.log(`  - ${skipReasons.missingAdSetName} rows missing Ad Set Name`);
-    if (skipReasons.missingAdName > 0) console.log(`  - ${skipReasons.missingAdName} rows missing Ad Name`);
-    if (skipReasons.invalidRowStructure > 0) console.log(`  - ${skipReasons.invalidRowStructure} rows with invalid structure`);
-    if (skipReasons.processingErrors > 0) console.log(`  - ${skipReasons.processingErrors} rows with processing errors`);
-  } else {
-    console.log(`✅ Successfully processed all ${validLeads.length} leads from sheet`);
-  }
-
-  // Convert skipReasons to breakdown array
-  const skipReasonsBreakdown: string[] = [
-    ...(skipReasons.missingName > 0 ? [`${skipReasons.missingName} rows missing Name`] : []),
-    ...(skipReasons.missingService > 0 ? [`${skipReasons.missingService} rows missing Service`] : []),
-    ...(skipReasons.missingAdSetName > 0 ? [`${skipReasons.missingAdSetName} rows missing Ad Set Name`] : []),
-    ...(skipReasons.missingAdName > 0 ? [`${skipReasons.missingAdName} rows missing Ad Name`] : []),
-    ...(skipReasons.invalidRowStructure > 0 ? [`${skipReasons.invalidRowStructure} rows with invalid structure`] : []),
-    ...(skipReasons.processingErrors > 0 ? [`${skipReasons.processingErrors} rows with processing errors`] : [])
-  ];
-
-  return {
-    leads: validLeads,
-    stats: {
-      totalRowsInSheet: data.length,
-      validLeadsProcessed: validLeads.length,
-      skippedRows: skipReasons.total,
-      skipReasons: skipReasonsBreakdown,
-      processedSubSheet: targetSheetName,
-      availableSubSheets: availableSubSheets
-    }
-  };
-}
-
-  // ---------------- COMPREHENSIVE SHEET PROCESSING ----------------
+  // ---- COMPREHENSIVE SHEET PROCESSING - OPTIMIZED -----
   public async processCompleteSheet(sheetUrl: string, clientId: string): Promise<{
     result: SheetProcessingResult;
     conversionData: any[];
   }> {
-    // 1. Fetch and parse leads from sheet
-    const sheetResult = await this.fetchLeadsFromSheet(sheetUrl, clientId);
-    const { leads, stats: sheetStats } = sheetResult;
+    // Initialize sheets service
+    const sheetsService = new SheetsService();
+    
+    // 1. Process sheet data (fetch, parse, extract insights)
+    const sheetData = await sheetsService.processSheetData(sheetUrl, clientId);
+    const { leads, stats: sheetStats, conversionRateInsights } = sheetData;
     
     // 2. Bulk upsert leads to database
     const bulkResult = await this.bulkCreateLeads(leads);
     
     // 3. Process leads for conversion rates
-    const conversionData = await this.processLeads(leads, clientId);
+    const conversionData = this.processLeads(leads, clientId);
     
-    // 4. Extract insights from conversion data
-    const conversionRateInsights = {
-      uniqueServices: [...new Set(conversionData.filter(d => d.keyField === 'service').map(d => d.keyName))],
-      uniqueAdSets: [...new Set(conversionData.filter(d => d.keyField === 'adSetName').map(d => d.keyName))],
-      uniqueAdNames: [...new Set(conversionData.filter(d => d.keyField === 'adName').map(d => d.keyName))],
-      uniqueMonths: [...new Set(conversionData.filter(d => d.keyField === 'leadDate').map(d => d.keyName))]
-    };
-    
+    // 4. Build comprehensive result
     const result: SheetProcessingResult = {
       totalRowsInSheet: sheetStats.totalRowsInSheet,
       validLeadsProcessed: sheetStats.validLeadsProcessed,
@@ -1055,45 +680,7 @@ public async fetchLeadsFromSheet(
   }
 
   // ---------------- PROCESSING FUNCTIONS ----------------
-  // Cache for month name lookups to avoid repeated date parsing
-  private monthNameCache = new Map<string, string | null>();
-  
-  private getMonthlyName(dateStr: string): string | null {
-    // Check cache first for performance
-    if (this.monthNameCache.has(dateStr)) {
-      return this.monthNameCache.get(dateStr)!;
-    }
-    
-    const d = new Date(dateStr);
-    const result = isNaN(d.getTime()) ? null : d.toLocaleString("en-US", { month: "long" });
-    
-    // Cache the result to avoid repeated calculations
-    this.monthNameCache.set(dateStr, result);
-    
-    // Clear cache if it gets too large to prevent memory leaks
-    if (this.monthNameCache.size > 1000) {
-      this.monthNameCache.clear();
-      this.monthNameCache.set(dateStr, result);
-    }
-    
-    return result;
-  }
-
-  // Static month map for better performance
-  private static readonly monthMap: Record<string, number> = {
-    january: 0,
-    february: 1,
-    march: 2,
-    april: 3,
-    may: 4,
-    june: 5,
-    july: 6,
-    august: 7,
-    september: 8,
-    october: 9,
-    november: 10,
-    december: 11,
-  };
+  // Utility functions moved to leads.util.ts
 
   /**
    * Get all unique client IDs from leads collection
@@ -1102,11 +689,6 @@ public async fetchLeadsFromSheet(
     const clientIds = await LeadModel.distinct("clientId").exec();
     return clientIds.filter(id => id); // Remove any null/undefined values
   }
-
-  /**
-   * Update conversion rates by adding new weekly data to existing data
-   * Now uses batch operations for better performance
-   */
 
   /**
    * Process weekly conversion rate updates for all clients
