@@ -47,8 +47,35 @@ import { SheetsService, type SheetProcessingResult } from "./sheets.service.js";
 
 // Re-export SheetProcessingResult from sheets service for backward compatibility
 export type { SheetProcessingResult } from "./sheets.service.js";
+interface PaginationOptions {
+    page: number;
+    limit: number;
+    sortBy: 'date' | 'score';
+    sortOrder: 'asc' | 'desc';
+  }
+
+  interface FilterOptions {
+    service?: string;
+    adSetName?: string;
+    adName?: string;
+    status?: string;
+    unqualifiedLeadReason?: string;
+  }
+
+  interface PaginatedLeadsResult {
+    leads: ILeadDocument[];
+    pagination: {
+      currentPage: number;
+      totalPages: number;
+      totalCount: number;
+      pageSize: number;
+      hasNext: boolean;
+      hasPrev: boolean;
+    };
+  }
 
 export class LeadService {
+
   /**
    * Update conversion rates and lead scores for all leads of a client.
    * - Calculates conversion rates for all 5 fields (service, adSetName, adName, leadDate, zip)
@@ -63,6 +90,10 @@ export class LeadService {
     updatedConversionRates: number;
     updatedLeads: number;
     errors: string[];
+    conversionRateStats?: {
+      newInserts: number;
+      updated: number;
+    };
   }> {
     const errors: string[] = [];
     try {
@@ -79,8 +110,8 @@ export class LeadService {
       console.log(`[CR Update] Calculated ${conversionData.length} conversion rates for clientId: ${clientId}`);
 
       // 3. Upsert conversion rates to DB
-      await conversionRateRepository.batchUpsertConversionRates(conversionData);
-      console.log(`[CR Update] Upserted conversion rates to DB for clientId: ${clientId}`);
+      const crUpsertResult = await conversionRateRepository.batchUpsertConversionRates(conversionData);
+      console.log(`[CR Update] Upserted conversion rates to DB for clientId: ${clientId} - New: ${crUpsertResult.stats.newInserts}, Updated: ${crUpsertResult.stats.updated}`);
 
       // 4. Fetch conversion rates from DB for this client
       const dbConversionRates = await conversionRateRepository.getConversionRates({ clientId });
@@ -151,7 +182,11 @@ export class LeadService {
       return {
         updatedConversionRates: conversionData.length,
         updatedLeads: actuallyUpdatedLeads,
-        errors
+        errors,
+        conversionRateStats: {
+          newInserts: crUpsertResult.stats.newInserts,
+          updated: crUpsertResult.stats.updated
+        }
       };
     } catch (error: any) {
       const errorMsg = `[CR Update] Error updating conversion rates and lead scores for clientId ${clientId}: ${error.message}`;
@@ -164,6 +199,147 @@ export class LeadService {
       };
     }
   }
+
+    // Pagination and filtering interfaces
+  
+
+  // Paginated, sortable, filterable leads fetch
+  public async getLeadsPaginated(
+  clientId?: string,
+  startDate?: string,
+  endDate?: string,
+  pagination: PaginationOptions = { page: 1, limit: 50, sortBy: 'date', sortOrder: 'desc' },
+  filters: FilterOptions = {}
+): Promise<PaginatedLeadsResult> {
+  const query: any = {};
+
+  // client filter
+  if (clientId) query.clientId = clientId;
+
+  // date filter -> cast to Date to leverage indexes
+  if (startDate || endDate) {
+    query.leadDate = {};
+    if (startDate) query.leadDate.$gte = startDate; // ⚠️ if you change schema to Date, wrap with new Date(startDate)
+    if (endDate) query.leadDate.$lte = endDate;
+  }
+
+  // filters
+  if (filters.service) query.service = filters.service;
+  if (filters.adSetName) query.adSetName = { $regex: filters.adSetName, $options: 'i' };
+  if (filters.adName) query.adName = { $regex: filters.adName, $options: 'i' };
+  if (filters.status) query.status = filters.status;
+  if (filters.unqualifiedLeadReason) {
+    query.status = 'unqualified';
+    query.unqualifiedLeadReason = { $regex: filters.unqualifiedLeadReason, $options: 'i' };
+  }
+
+  // pagination setup
+  const skip = (pagination.page - 1) * pagination.limit;
+  const sortField = pagination.sortBy === 'score' ? 'leadScore' : 'leadDate';
+  const sortOrder = pagination.sortOrder === 'desc' ? -1 : 1;
+
+  // run count + leads query in parallel
+  const [totalCount, leads] = await Promise.all([
+    LeadModel.countDocuments(query),
+    LeadModel.find(query)
+      .sort({ [sortField]: sortOrder })
+      .skip(skip)
+      .limit(pagination.limit)
+      .lean()
+      .exec()
+  ]);
+
+  const totalPages = Math.max(1, Math.ceil(totalCount / pagination.limit));
+
+  return {
+    leads,
+    pagination: {
+      currentPage: pagination.page,
+      totalPages,
+      totalCount,
+      pageSize: pagination.limit,
+      hasNext: pagination.page < totalPages,
+      hasPrev: pagination.page > 1
+    }
+  };
+}
+
+
+  // Filter options for dropdowns
+  // Filter options for dropdowns + status counts
+public async fetchLeadFiltersAndCounts(
+  clientId?: string,
+  startDate?: string,
+  endDate?: string
+): Promise<{
+  filterOptions: {
+    services: string[];
+    adSetNames: string[];
+    adNames: string[];
+    statuses: string[];
+    unqualifiedLeadReasons: string[];
+  };
+  statusCounts: {
+    new: number;
+    inProgress: number;
+    estimateSet: number;
+    unqualified: number;
+  };
+}>
+ {
+  const query: any = {};
+  if (clientId) query.clientId = clientId;
+
+  if (startDate || endDate) {
+    query.leadDate = {};
+    if (startDate) query.leadDate.$gte = startDate;
+    if (endDate) query.leadDate.$lte = endDate;
+  }
+
+  // run distinct queries in parallel
+  const [services, adSetNames, adNames, statuses, unqualifiedLeadReasons, statusAgg] =
+    await Promise.all([
+      LeadModel.distinct("service", query),
+      LeadModel.distinct("adSetName", query),
+      LeadModel.distinct("adName", query),
+      LeadModel.distinct("status", query),
+      LeadModel.distinct("unqualifiedLeadReason", { ...query, status: "unqualified" }),
+      // aggregation for status counts
+      LeadModel.aggregate([
+        { $match: query },
+        {
+          $group: {
+            _id: "$status",
+            count: { $sum: 1 }
+          }
+        }
+      ])
+    ]);
+
+  // normalize status counts
+  const statusCountsMap = statusAgg.reduce((acc, item) => {
+    acc[item._id?.toLowerCase() || "unknown"] = item.count;
+    return acc;
+  }, {} as Record<string, number>);
+
+  const statusCounts = {
+    new: statusCountsMap["new"] || 0,
+    inProgress: statusCountsMap["in progress"] || 0,
+    estimateSet: statusCountsMap["estimate_set"] || 0,
+    unqualified: statusCountsMap["unqualified"] || 0
+  };
+
+  return {
+  filterOptions: {
+    services: services.filter(Boolean).sort(),
+    adSetNames: adSetNames.filter(Boolean).sort(),
+    adNames: adNames.filter(Boolean).sort(),
+    statuses: statuses.filter(Boolean).sort(),
+    unqualifiedLeadReasons: unqualifiedLeadReasons.filter(Boolean).sort(),
+  },
+  statusCounts
+};
+}
 
   /**
    * Calculate and store lead scores for leads that don't have them
@@ -213,7 +389,7 @@ export class LeadService {
 
       // Create conversion rates map for efficient lookups
       const conversionRatesMap = createConversionRatesMap(conversionRates);
-      
+
       // Calculate scores for leads without them
       const bulkOps = leadsWithoutScores.map(lead => {
         const leadScore = calculateLeadScore(lead, conversionRatesMap);
@@ -291,7 +467,7 @@ export class LeadService {
 
       // Create conversion rates map for efficient lookups
       const conversionRatesMap = createConversionRatesMap(conversionRates);
-      
+
       // Calculate new scores for all leads
       const bulkOps = allLeads.map(lead => {
         const leadScore = calculateLeadScore(lead, conversionRatesMap);
@@ -368,7 +544,7 @@ export class LeadService {
       if (lead.service) serviceSet.add(lead.service);
       if (lead.adSetName) adSetNameSet.add(lead.adSetName);
       if (lead.adName) adNameSet.add(lead.adName);
-      if (lead.zip && lead.zip.trim()) zipSet.add(lead.zip.trim()); // NEW: Add ZIP codes
+      if (lead.zip && typeof lead.zip === 'string' && lead.zip.trim()) zipSet.add(lead.zip.trim()); // NEW: Add ZIP codes
       
       // Optimized month extraction
       if (lead.leadDate) {
@@ -416,7 +592,7 @@ export class LeadService {
     } else if (keyField === "zip") {
       // Single pass through leads for ZIP filtering
       for (const lead of clientLeads) {
-        if (lead.zip && lead.zip.trim() === keyName) {
+        if (lead.zip && typeof lead.zip === 'string' && lead.zip.trim() === keyName) {
           totalForKey++;
           if (lead.status === 'estimate_set') {
             yesForKey++;
@@ -435,9 +611,9 @@ export class LeadService {
       }
     }
 
-    // Conversion rate as decimal, rounded to 2 decimals
-    const conversionRate = totalForKey === 0 ? 0 :
-      Math.round((yesForKey / totalForKey) * 100) / 100;
+      // Conversion rate as decimal, rounded to 2 decimals
+      const conversionRate = totalForKey === 0 ? 0 :
+        Math.round((yesForKey / totalForKey) * 100) / 100;
       
     return {
       conversionRate,
@@ -542,7 +718,7 @@ export class LeadService {
 
     // Batch upsert all conversion rates at once
     const upsertedRates = await conversionRateRepository.batchUpsertConversionRates(ratesToUpsert);
-    console.log(`Batch upserted ${upsertedRates.length} conversion rates for client ${clientId}`);
+    console.log(`Batch upserted ${upsertedRates.documents.length} conversion rates for client ${clientId} - New: ${upsertedRates.stats.newInserts}, Updated: ${upsertedRates.stats.updated}`);
     
     // After updating conversion rates, recalculate lead scores for this client
     try {
@@ -553,7 +729,7 @@ export class LeadService {
       console.error(`Error updating lead scores after conversion rate update for client ${clientId}:`, error);
     }
     
-    return upsertedRates;
+    return upsertedRates.documents;
   }
   // ---------------- DATABASE OPERATIONS ----------------
   
