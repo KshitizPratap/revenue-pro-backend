@@ -188,7 +188,7 @@ export class LeadController {
     }
   }
 
-  async getLeadFilters(req: Request, res: Response): Promise<void> {
+  async getLeadFiltersAndCounts(req: Request, res: Response): Promise<void> {
     try {
       // Check if clientId is missing or empty
       if (!req.query.clientId) {
@@ -217,7 +217,7 @@ export class LeadController {
       }
 
       // Fetch conversion rates for dropdowns
-      const filterOptions = await this.service.getLeadFilterOptions(
+      const filterOptions = await this.service.fetchLeadFiltersAndCounts(
         clientId,
         startDate,
         endDate

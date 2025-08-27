@@ -266,17 +266,27 @@ export class LeadService {
 
 
   // Filter options for dropdowns
-  public async getLeadFilterOptions(
+  // Filter options for dropdowns + status counts
+public async fetchLeadFiltersAndCounts(
   clientId?: string,
   startDate?: string,
   endDate?: string
 ): Promise<{
-  services: string[];
-  adSetNames: string[];
-  adNames: string[];
-  statuses: string[];
-  unqualifiedLeadReasons: string[];
-}> {
+  data: {
+    services: string[];
+    adSetNames: string[];
+    adNames: string[];
+    statuses: string[];
+    unqualifiedLeadReasons: string[];
+  };
+  statusCounts: {
+    new: number;
+    inProgress: number;
+    estimateSet: number;
+    unqualified: number;
+  };
+}>
+ {
   const query: any = {};
   if (clientId) query.clientId = clientId;
 
@@ -286,22 +296,49 @@ export class LeadService {
     if (endDate) query.leadDate.$lte = endDate;
   }
 
-  // run all distinct queries in parallel
-  const [services, adSetNames, adNames, statuses, unqualifiedLeadReasons] = await Promise.all([
-    LeadModel.distinct("service", query),
-    LeadModel.distinct("adSetName", query),
-    LeadModel.distinct("adName", query),
-    LeadModel.distinct("status", query),
-    LeadModel.distinct("unqualifiedLeadReason", { ...query, status: "unqualified" })
-  ]);
+  // run distinct queries in parallel
+  const [services, adSetNames, adNames, statuses, unqualifiedLeadReasons, statusAgg] =
+    await Promise.all([
+      LeadModel.distinct("service", query),
+      LeadModel.distinct("adSetName", query),
+      LeadModel.distinct("adName", query),
+      LeadModel.distinct("status", query),
+      LeadModel.distinct("unqualifiedLeadReason", { ...query, status: "unqualified" }),
+      // aggregation for status counts
+      LeadModel.aggregate([
+        { $match: query },
+        {
+          $group: {
+            _id: "$status",
+            count: { $sum: 1 }
+          }
+        }
+      ])
+    ]);
+
+  // normalize status counts
+  const statusCountsMap = statusAgg.reduce((acc, item) => {
+    acc[item._id?.toLowerCase() || "unknown"] = item.count;
+    return acc;
+  }, {} as Record<string, number>);
+
+  const statusCounts = {
+    new: statusCountsMap["new"] || 0,
+    inProgress: statusCountsMap["in progress"] || 0,
+    estimateSet: statusCountsMap["estimate_set"] || 0,
+    unqualified: statusCountsMap["unqualified"] || 0
+  };
 
   return {
+  data: {
     services: services.filter(Boolean).sort(),
     adSetNames: adSetNames.filter(Boolean).sort(),
     adNames: adNames.filter(Boolean).sort(),
     statuses: statuses.filter(Boolean).sort(),
-    unqualifiedLeadReasons: unqualifiedLeadReasons.filter(Boolean).sort()
-  };
+    unqualifiedLeadReasons: unqualifiedLeadReasons.filter(Boolean).sort(),
+  },
+  statusCounts
+};
 }
 
   /**
