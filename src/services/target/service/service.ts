@@ -54,13 +54,13 @@ export class TargetService {
 
     for (const target of targets) {
       aggregated.revenue += target.revenue || 0;
+      aggregated.managementCost += target.managementCost || 0;
     }
     aggregated.avgJobSize = targets[0].avgJobSize || 0;
     aggregated.appointmentRate = targets[0].appointmentRate || 0;
     aggregated.showRate = targets[0].showRate || 0;
     aggregated.closeRate = targets[0].closeRate || 0;
     aggregated.com = targets[0].com || 0;
-    aggregated.managementCost = targets[0].managementCost || 0;
 
     return aggregated as IWeeklyTargetDocument;
   }
