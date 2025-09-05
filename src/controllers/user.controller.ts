@@ -28,6 +28,7 @@ class UserController {
           role: user.role,
           imageURL: user.imageURL,
           isEmailVerified: user.isEmailVerified,
+          hasLoggedIn: user.hasLoggedIn,
         },
       });
     } catch (error) {

@@ -118,6 +118,66 @@ class AdminController {
       utils.sendErrorResponse(res, error);
     }
   };
+
+  public updateUsersLoginStatus = async (req: Request, res: Response): Promise<void> => {
+    try {
+      const { userIds, hasLoggedIn } = req.body;
+
+      // Validate input
+      if (!userIds || !Array.isArray(userIds) || userIds.length === 0) {
+        utils.sendErrorResponse(res, "userIds array is required and must not be empty");
+        return;
+      }
+
+      if (typeof hasLoggedIn !== 'boolean') {
+        utils.sendErrorResponse(res, "hasLoggedIn must be a boolean value");
+        return;
+      }
+
+      // Update each user's login status
+      const results = [];
+      const errors = [];
+
+      for (const userId of userIds) {
+        try {
+          const updatedUser = await this.userService.updateUserLoginStatus(userId, hasLoggedIn);
+          results.push({
+            userId,
+            success: true,
+            user: {
+              id: updatedUser._id,
+              email: updatedUser.email,
+              name: updatedUser.name,
+              hasLoggedIn: updatedUser.hasLoggedIn
+            }
+          });
+        } catch (error) {
+          errors.push({
+            userId,
+            success: false,
+            error: error instanceof Error ? error.message : "Unknown error"
+          });
+        }
+      }
+
+      const successCount = results.length;
+      const errorCount = errors.length;
+
+      utils.sendSuccessResponse(res, 200, {
+        success: true,
+        message: `Updated ${successCount} users successfully${errorCount > 0 ? `, ${errorCount} failed` : ''}`,
+        data: {
+          totalRequested: userIds.length,
+          successCount,
+          errorCount,
+          results,
+          errors: errorCount > 0 ? errors : undefined
+        }
+      });
+    } catch (error) {
+      utils.sendErrorResponse(res, error);
+    }
+  };
 }
 
 export default new AdminController();

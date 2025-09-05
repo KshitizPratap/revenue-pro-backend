@@ -88,6 +88,7 @@ export default class UserService {
     email: string;
     role: string;
     isEmailVerified: boolean;
+    hasLoggedIn?: boolean;
   }): Promise<IUser> {
     const updatedUser = await this.repository.updateUser(userId, updateData);
 
@@ -130,6 +131,24 @@ export default class UserService {
         role,
         isEmailVerified
       );
+    } catch (error) {
+      throw utils.ThrowableError(error);
+    }
+  }
+
+  async updateUserLoginStatus(userId: string, hasLoggedIn: boolean): Promise<IUser> {
+    try {
+      if (!userId) {
+        throw new CustomError(ErrorCode.INVALID_INPUT, "User ID is required");
+      }
+      
+      const updatedUser = await this.repository.updateUser(userId, { hasLoggedIn });
+      
+      if (!updatedUser) {
+        throw new CustomError(ErrorCode.NOT_FOUND, "User not found");
+      }
+      
+      return updatedUser;
     } catch (error) {
       throw utils.ThrowableError(error);
     }

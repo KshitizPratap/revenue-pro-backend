@@ -21,6 +21,7 @@ export class UserRepositoryService {
         password,
         role,
         isEmailVerified,
+        hasLoggedIn: false,
         imageURL,
       });
       await user.save();
@@ -81,6 +82,7 @@ export class UserRepositoryService {
     imageURL?: string;
     role?: string;
     isEmailVerified?: boolean;
+    hasLoggedIn?: boolean;
   }): Promise<IUser | null> {
     try {
       if (!userId) {
