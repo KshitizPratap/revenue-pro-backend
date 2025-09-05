@@ -37,6 +37,8 @@ class AuthService {
       if (!isPasswordValid) {
         throw new CustomError(ErrorCode.BAD_REQUEST, "Invalid credentials");
       }
+      // Update hasLoggedIn status to true
+      await this.userService.updateUserLoginStatus(user._id as string, true);
 
       const token = createToken({ id: user._id as string, email: user.email });
       return {

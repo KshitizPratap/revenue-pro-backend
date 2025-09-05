@@ -22,6 +22,10 @@ const userSchema = new Schema<IUser, IUserModel>(
       type: Boolean,
       default: false,
     },
+    hasLoggedIn: {
+      type: Boolean,
+      default: false,
+    },
     name: String,
   },
   {

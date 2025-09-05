@@ -8,6 +8,7 @@ import userRoutes from "./user.routes.js"
 import leadRouter from "./leads.route.js";
 import createLeadRouter from "./createLead.route.js"
 import sheetRouter from "./sheet.routes.js"
+import { ipTrackingRoutes } from "./ipTracking.routes.js"
 
 
 import {
@@ -52,6 +53,11 @@ const authenticatedRoutes: Route[] = [
   router: leadRouter,
   middlewares: [], // add auth middlewares if needed
 },
+  {
+    path: "/api/v1/ip-tracking",
+    router: ipTrackingRoutes,
+    middlewares: [],
+  },
 ];
 
 const routes: Route[] = [
