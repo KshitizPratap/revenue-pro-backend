@@ -20,8 +20,20 @@ export class LeadController {
     res: Response
   ): Promise<void> {
     try {
-      // Get all unique clientIds from leads collection
-      const clientIds = await this.service.getAllClientIds();
+      let clientIds: string[] = [];
+
+    if (req.query.clientId) {
+      // Single client from query param
+      clientIds = [String(req.query.clientId)];
+    } else {
+      // Fallback: all clientIds from DB
+      clientIds = await this.service.getAllClientIds();
+      if (!clientIds || clientIds.length === 0) {
+        utils.sendErrorResponse(res, "No clientIds found in leads collection");
+        return;
+      }
+    }
+
       if (!clientIds || clientIds.length === 0) {
         utils.sendErrorResponse(res, "No clientIds found in leads collection");
         return;
@@ -362,55 +374,65 @@ export class LeadController {
 }
 
   async createLead(req: Request, res: Response): Promise<void> {
-    try {
-      // Support bulk creation if req.body is array, else single object
-      const leadsPayload = Array.isArray(req.body) ? req.body : [req.body];
-      const createdLeads = [];
+  try {
+    const leadsPayload = Array.isArray(req.body) ? req.body : [req.body];
+    const processedLeads = [];
 
-      // Validate and sanitize each lead payload
-      for (const rawPayload of leadsPayload) {
-        // Sanitize data at entry point
-        const payload = sanitizeLeadData(rawPayload);
-        
-        // Set default status if not provided
-        if (!payload.status) {
-          payload.status = "new";
-        }
+    for (const rawPayload of leadsPayload) {
+      const payload = sanitizeLeadData(rawPayload);
 
-        // Validate status
-        if (
-          !["new", "in_progress", "estimate_set", "unqualified"].includes(
-            payload.status
-          )
-        ) {
-          utils.sendErrorResponse(
-            res,
-            `Invalid status '${payload.status}'. Must be one of: new, in_progress, estimate_set, unqualified`
-          );
-          return;
-        }
-
-        // Clear unqualifiedLeadReason if status is not "unqualified"
-        if (payload.status !== "unqualified") {
-          payload.unqualifiedLeadReason = "";
-        }
-
-        // Initialize leadScore as 0 for new leads (will be calculated on first getLeads call)
-        payload.leadScore = 0;
-
-        const lead = await this.service.createLead(payload);
-        createdLeads.push(lead);
+      // Default status
+      if (!payload.status) {
+        payload.status = "new";
       }
 
-      utils.sendSuccessResponse(res, 201, {
-        success: true,
-        data: createdLeads.length === 1 ? createdLeads[0] : createdLeads,
-      });
-    } catch (error) {
-      console.error("Error in createLead:", error);
-      utils.sendErrorResponse(res, error);
+      // Validate status
+      if (!["new", "in_progress", "estimate_set", "unqualified"].includes(payload.status)) {
+        utils.sendErrorResponse(
+          res,
+          `Invalid status '${payload.status}'. Must be one of: new, in_progress, estimate_set, unqualified`
+        );
+        return;
+      }
+
+      // Clear unqualifiedLeadReason if not unqualified
+      if (payload.status !== "unqualified") {
+        payload.unqualifiedLeadReason = "";
+      }
+
+      // Initialize leadScore if missing
+      if (!payload.leadScore) {
+        payload.leadScore = 0;
+      }
+
+      // 🔑 Strict uniqueness filter
+      const query = {
+        clientId: payload.clientId,
+        adSetName: payload.adSetName,
+        name: payload.name,
+        email: payload.email,
+        phone: payload.phone,
+        service: payload.service,
+        adName: payload.adName,
+        zip: payload.zip,
+      };
+
+
+      const lead = await this.service.upsertLead(query, payload);
+      processedLeads.push(lead);
     }
+
+    utils.sendSuccessResponse(res, 201, {
+      success: true,
+      data: processedLeads.length === 1 ? processedLeads[0] : processedLeads,
+    });
+  } catch (error) {
+    console.error("Error in createLead:", error);
+    utils.sendErrorResponse(res, error);
   }
+}
+
+
 
   async updateLead(req: Request, res: Response): Promise<void> {
     try {

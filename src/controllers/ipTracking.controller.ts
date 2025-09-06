@@ -1,7 +1,7 @@
 import { Request, Response } from "express";
 import IPTrackingService from "../services/ipTracking/service/service.js";
 import { Context } from "../services/common/domain/context.js";
-import utils from "@/utils/utils.js";
+import utils from "../utils/utils.js";
 
 class IPTrackingController {
   private ipTrackingService: IPTrackingService;
