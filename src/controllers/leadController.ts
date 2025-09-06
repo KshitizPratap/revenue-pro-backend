@@ -20,8 +20,20 @@ export class LeadController {
     res: Response
   ): Promise<void> {
     try {
-      // Get all unique clientIds from leads collection
-      const clientIds = await this.service.getAllClientIds();
+      let clientIds: string[] = [];
+
+    if (req.query.clientId) {
+      // Single client from query param
+      clientIds = [String(req.query.clientId)];
+    } else {
+      // Fallback: all clientIds from DB
+      clientIds = await this.service.getAllClientIds();
+      if (!clientIds || clientIds.length === 0) {
+        utils.sendErrorResponse(res, "No clientIds found in leads collection");
+        return;
+      }
+    }
+
       if (!clientIds || clientIds.length === 0) {
         utils.sendErrorResponse(res, "No clientIds found in leads collection");
         return;
