@@ -393,23 +393,17 @@ export class LeadController {
         payload.leadScore = 0;
       }
 
-      // 🔑 Identity-based uniqueness filter
-      const query: any = { clientId: payload.clientId };
-
-      const hasEmail = payload.email && payload.email.trim() !== "";
-      const hasPhone = payload.phone && payload.phone.trim() !== "";
-
-      if (hasEmail && hasPhone) {
-        // Either email OR phone matches
-        query.$or = [{ email: payload.email }, { phone: payload.phone }];
-      } else if (hasEmail) {
-        query.email = payload.email;
-      } else if (hasPhone) {
-        query.phone = payload.phone;
-      } else {
-        // Neither phone nor email → force new doc
-        query._id = new Date().getTime() + Math.random();
-      }
+      // 🔑 Strict uniqueness filter
+      const query = {
+        clientId: payload.clientId,
+        adSetName: payload.adSetName,
+        name: payload.name,
+        email: payload.email,
+        phone: payload.phone,
+        service: payload.service,
+        adName: payload.adName,
+        zip: payload.zip,
+      };
 
 
       const lead = await this.service.upsertLead(query, payload);
