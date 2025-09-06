@@ -364,6 +364,20 @@ public async getPerformanceTables(
   };
 }
 
+public async upsertLead(query: Pick<ILeadDocument, "clientId" | "adSetName" | "email" | "phone" | "service" | "adName" | "zip">, payload: Partial<ILeadDocument>) {
+  return await LeadModel.findOneAndUpdate(
+    query,
+    { $set: payload },
+    {
+      new: true,
+      upsert: true,
+      setDefaultsOnInsert: true, // ensure schema defaults get applied
+    }
+  );
+}
+
+
+
 /**
  * Private methods updated to return pagination structure
  */
@@ -1494,7 +1508,24 @@ public async fetchLeadFiltersAndCounts(
     
     // 1. Process sheet data (fetch, parse, extract insights)
     const sheetData = await sheetsService.processSheetData(sheetUrl, clientId);
-    const { leads, stats: sheetStats, conversionRateInsights } = sheetData;
+    let { leads, stats: sheetStats, conversionRateInsights } = sheetData;
+
+    // ✅ Normalize status + unqualifiedLeadReason only for sheet processing
+    leads = leads.map((lead) => {
+      const isEstimateSet = lead.status === "estimate_set";
+      const hasUnqualifiedReason =
+        lead.unqualifiedLeadReason && lead.unqualifiedLeadReason.trim() !== "";
+
+      if (!isEstimateSet && !hasUnqualifiedReason) {
+        return {
+          ...lead,
+          status: "new",
+          unqualifiedLeadReason: "",
+        };
+      }
+
+      return lead;
+    });
     
     // 2. Bulk upsert leads to database with optional uniqueness
     const bulkResult = await this.bulkCreateLeads(leads, uniquenessByPhoneEmail);
