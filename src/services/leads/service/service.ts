@@ -52,7 +52,7 @@ import {
   startOfYear, endOfYear, 
   subMonths, subQuarters, subYears, format
 }  from 'date-fns';
-import User from "@/services/user/repository/models/user.model.js";
+import User from "../../user/repository/models/user.model.js";
 
 // Types moved to leads.util.ts and sheets.service.ts for better organization
 
