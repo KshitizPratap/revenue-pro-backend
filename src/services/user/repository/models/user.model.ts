@@ -27,6 +27,10 @@ const userSchema = new Schema<IUser, IUserModel>(
       default: false,
     },
     name: String,
+    leadSheetUrl: {
+      type: String,
+      required: false,
+    },
   },
   {
     timestamps: { createdAt: "created_at", updatedAt: "updated_at" },
