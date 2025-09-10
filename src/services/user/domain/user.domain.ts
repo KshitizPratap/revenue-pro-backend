@@ -9,6 +9,7 @@ export interface IUser extends Document {
   isEmailVerified: boolean;
   hasLoggedIn: boolean;
   name: string;
+  leadSheetUrl?: string;
   created_at: Date;
   updated_at: Date;
   comparePassword(candidatePassword: string): Promise<boolean>;

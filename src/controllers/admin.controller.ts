@@ -56,6 +56,7 @@ class AdminController {
       email: user.email,
       name: user.name,
       role: user.role,
+      leadSheetUrl: user.leadSheetUrl || "",
       isEmailVerified: user.isEmailVerified,
       created_at: user.created_at,
     };
