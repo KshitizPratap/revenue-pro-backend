@@ -417,6 +417,19 @@ if (req.query.clientId) {
     const processedLeads = [];
 
     for (const rawPayload of leadsPayload) {
+      // Parse and convert leadDate from CST to UTC before sanitization
+      if (rawPayload.leadDate) {
+        const parsedDate = utils.parseDate(rawPayload.leadDate);
+        if (!parsedDate) {
+          utils.sendErrorResponse(
+            res,
+            `Invalid leadDate format: ${rawPayload.leadDate}. Expected formats: YYYY-MM-DD, MM/DD/YYYY, etc.`
+          );
+          return;
+        }
+        rawPayload.leadDate = parsedDate; // Now contains UTC ISO string
+      }
+      
       const payload = sanitizeLeadData(rawPayload);
 
       // Default status

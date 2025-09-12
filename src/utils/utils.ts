@@ -54,79 +54,32 @@ class utils {
   }
 
   /**
-   * Parse various date formats into ISO date string (YYYY-MM-DD)
+   * Parse various date formats and convert from CST to UTC
    * Handles multiple formats: MM-DD-YYYY, MM/DD/YYYY, DD-MM-YYYY, DD/MM/YYYY, YYYY-MM-DD, etc.
-   * Returns empty string for invalid dates
+   * Returns UTC ISO string for database storage
    * 
    * @param dateValue - Date value to parse (Date object, string, or number)
    * @param rowIndex - Optional row index for logging purposes
-   * @returns ISO date string (YYYY-MM-DD) or empty string if invalid
+   * @returns UTC ISO string or empty string if invalid
    */
   public parseDate(dateValue: any, rowIndex?: number): string {
     if (!dateValue) return "";
 
     try {
-      if (dateValue instanceof Date) {
-        // Check if it's a valid date object
-        if (!isNaN(dateValue.getTime())) {
-          return dateValue.toISOString().slice(0, 10);
-        } else {
-          this.logDateWarning(`Invalid Date object`, dateValue, rowIndex);
-          return "";
-        }
+      // Use the new timezone utility for consistent CST to UTC conversion
+      const { TimezoneUtils } = require('./timezoneUtils.js');
+      const result = TimezoneUtils.convertLeadDateToUTCString(dateValue, rowIndex);
+      
+      if (result.success && result.utcIsoString) {
+        return result.utcIsoString;
       } else {
-        // Handle string/number date formats
-        let dateString = String(dateValue).trim();
-        let parsedDate: Date | null = null;
-        
-        // Try multiple date formats
-        if (dateString) {
-          // Format: MM-DD-YYYY or MM/DD/YYYY or M/D/YYYY etc.
-          if (/^\d{1,2}[-\/]\d{1,2}[-\/]\d{4}$/.test(dateString)) {
-            // Replace any separator with / for consistent parsing
-            const normalizedDate = dateString.replace(/[-]/g, '/');
-            parsedDate = new Date(normalizedDate);
-          }
-          // Format: YYYY-MM-DD
-          else if (/^\d{4}-\d{1,2}-\d{1,2}$/.test(dateString)) {
-            parsedDate = new Date(dateString);
-          }
-          // Format: DD-MM-YYYY or DD/MM/YYYY (European format)
-          else if (/^\d{1,2}[-\/]\d{1,2}[-\/]\d{4}$/.test(dateString)) {
-            // Try as MM/DD/YYYY first, then DD/MM/YYYY if invalid
-            const parts = dateString.split(/[-\/]/);
-            if (parts.length === 3) {
-              // Try MM/DD/YYYY format first
-              const usFormat = `${parts[0]}/${parts[1]}/${parts[2]}`;
-              parsedDate = new Date(usFormat);
-              
-              // If invalid and might be DD/MM/YYYY, try that
-              if (isNaN(parsedDate.getTime()) && parseInt(parts[0]) > 12) {
-                const euroFormat = `${parts[1]}/${parts[0]}/${parts[2]}`;
-                parsedDate = new Date(euroFormat);
-              }
-            }
-          }
-          // Fallback: Let JavaScript try to parse it
-          else {
-            parsedDate = new Date(dateString);
-          }
-          
-          // Validate the parsed date
-          if (parsedDate && !isNaN(parsedDate.getTime())) {
-            return parsedDate.toISOString().slice(0, 10);
-          } else {
-            this.logDateWarning(`Unable to parse date`, dateValue, rowIndex);
-            return "";
-          }
-        }
+        this.logDateWarning(`Timezone conversion failed: ${result.error}`, dateValue, rowIndex);
+        return "";
       }
-    } catch (dateError) {
-      this.logDateWarning(`Date parsing error: ${dateError}`, dateValue, rowIndex);
+    } catch (error) {
+      this.logDateWarning(`Date parsing error: ${error}`, dateValue, rowIndex);
       return "";
     }
-
-    return "";
   }
 
   /**

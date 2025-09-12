@@ -33,6 +33,7 @@ import { ILead, ILeadDocument, LeadStatus } from "../domain/leads.domain.js";
 import LeadModel from "../repository/models/leads.model.js";
 import { conversionRateRepository } from "../repository/repository.js";
 import { IConversionRate } from "../repository/models/conversionRate.model.js";
+import { TimezoneUtils } from "../../../utils/timezoneUtils.js";
 import {
   FIELD_WEIGHTS,
   getMonthlyName,
@@ -181,7 +182,9 @@ export class LeadService {
         const serviceRate = getConversionRateFromMap(conversionRatesMap, 'service', lead.service || '');
         const adSetNameRate = getConversionRateFromMap(conversionRatesMap, 'adSetName', lead.adSetName || '');
         const adNameRate = getConversionRateFromMap(conversionRatesMap, 'adName', lead.adName || '');
-        const monthName = new Date(lead.leadDate).toLocaleString("en-US", { month: "long" });
+        // leadDate is now a UTC ISO string, convert to CST for month extraction
+        const cstDate = TimezoneUtils.convertUTCStringToCST(lead.leadDate);
+        const monthName = cstDate.toLocaleString("en-US", { month: "long" });
         const leadDateRate = getConversionRateFromMap(conversionRatesMap, 'leadDate', monthName);
         const zipRate = getConversionRateFromMap(conversionRatesMap, 'zip', lead.zip || '');
 
@@ -705,7 +708,9 @@ private async processAdNameAnalysis(leads: any[]) {
 
 private async processDayOfWeekAnalysis(leads: any[]) {
   const dayOfWeekAnalysis = leads.reduce((acc, lead) => {
-    const dayOfWeek = new Date(lead.leadDate).toLocaleDateString('en-US', { weekday: 'long' });
+    // Convert UTC ISO string to CST for day of week calculation
+    const cstDate = TimezoneUtils.convertUTCStringToCST(lead.leadDate);
+    const dayOfWeek = cstDate.toLocaleDateString('en-US', { weekday: 'long' });
     if (!acc[dayOfWeek]) {
       acc[dayOfWeek] = { total: 0, estimateSet: 0 };
     }
@@ -729,9 +734,29 @@ private async processDayOfWeekAnalysis(leads: any[]) {
     });
 }
 
+
+private createDateRangeQuery(startDate?: string, endDate?: string): any {
+  if (!startDate && !endDate) return {};
+  
+  if (startDate && endDate) {
+    const dateRange = TimezoneUtils.createDateRangeQuery(startDate, endDate);
+    return dateRange.leadDate;
+  } else if (startDate) {
+    const dateRange = TimezoneUtils.createDateRangeQuery(startDate, startDate);
+    return { $gte: dateRange.leadDate.$gte };
+  } else if (endDate) {
+    const dateRange = TimezoneUtils.createDateRangeQuery(endDate, endDate);
+    return { $lte: dateRange.leadDate.$lte };
+  }
+  
+  return {};
+}
+
 private async processLeadDateAnalysis(estimateSetLeads: any[], estimateSetCount: number) {
   const leadDateAnalysis = estimateSetLeads.reduce((acc, lead) => {
-    const date = new Date(lead.leadDate).toLocaleDateString('en-US', { 
+    // Convert UTC ISO string to CST for date analysis
+    const cstDate = TimezoneUtils.convertUTCStringToCST(lead.leadDate);
+    const date = cstDate.toLocaleDateString('en-US', { 
       month: 'short', 
       day: 'numeric' 
     });
@@ -911,11 +936,9 @@ private getEmptyAnalyticsResult(): AnalyticsResult {
   // client filter
   if (clientId) query.clientId = clientId;
 
-  // date filter -> cast to Date to leverage indexes
+  // date filter -> use timezone-aware date range query
   if (startDate || endDate) {
-    query.leadDate = {};
-    if (startDate) query.leadDate.$gte = startDate; // ⚠️ if you change schema to Date, wrap with new Date(startDate)
-    if (endDate) query.leadDate.$lte = endDate;
+    query.leadDate = this.createDateRangeQuery(startDate, endDate);
   }
 
   // filters
@@ -986,9 +1009,7 @@ public async fetchLeadFiltersAndCounts(
   if (clientId) query.clientId = clientId;
 
   if (startDate || endDate) {
-    query.leadDate = {};
-    if (startDate) query.leadDate.$gte = startDate;
-    if (endDate) query.leadDate.$lte = endDate;
+    query.leadDate = this.createDateRangeQuery(startDate, endDate);
   }
 
   // run distinct queries in parallel
