@@ -452,13 +452,11 @@ export class SheetsService {
           lead.status = "in_progress";
           lead.unqualifiedLeadReason="";
       }
-      else 
-      if(hasUnqualifiedReason && lead.unqualifiedLeadReason === "estimate_set"){
+      else if(hasUnqualifiedReason && lead.unqualifiedLeadReason === "estimate_set"){
         lead.status = "estimate_set";
         lead.unqualifiedLeadReason="";
       }
-      else
-      if(hasUnqualifiedReason && lead.unqualifiedLeadReason === "new"){
+      else if(hasUnqualifiedReason && lead.unqualifiedLeadReason === "new"){
         lead.status = "new";
         lead.unqualifiedLeadReason="";
       }
