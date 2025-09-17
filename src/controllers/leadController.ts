@@ -513,7 +513,7 @@ if (req.query.clientId) {
       const ids = Array.isArray(req.body.leadIds) ? req.body.leadIds : [req.body.leadIds];
 
       if (!ids || ids.length === 0) {
-      utils.sendErrorResponse(res, "_id or array of _id is required for delete");
+      utils.sendErrorResponse(res, "Required leadId missing");
       return;
       }
 
@@ -522,11 +522,11 @@ if (req.query.clientId) {
       const message =
       deletedResult.deletedCount > 0
         ? `${deletedResult.deletedCount} lead(s) have been deleted successfully!`
-        : "No leads were deleted. Please check the provided IDs.";
+        : "No lead deleted for given leadId(s)";
 
       utils.sendSuccessResponse(res, 200, {success: true, data: deletedResult, info: message});
     } catch (error) {
-      console.error("Error in deleteLead:", error);
+      console.error("Error in lead(s) deletion:", error);
       utils.sendErrorResponse(res, error);
     }
   }
