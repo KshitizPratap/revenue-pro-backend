@@ -46,7 +46,7 @@ export const leadRepository = {
     // Soft delete instead of hard delete
     return await LeadModel.findByIdAndUpdate(
       id,
-      { $set: { isDeleted: true } },
+      { $set: { isDeleted: true, deletedAt: new Date() } },
       { new: true }
     ).exec();
   },
