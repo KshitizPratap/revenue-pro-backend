@@ -1,6 +1,5 @@
 import { ILead, ILeadDocument } from "../domain/leads.domain.js";
-import LeadModel from "../repository/models/leads.model.js";
-import { conversionRateRepository } from "../repository/repository.js";
+import { conversionRateRepository, leadRepository } from "../repository/repository.js";
 import { TimezoneUtils } from "../../../utils/timezoneUtils.js";
 import { TimeFilter } from "../../../types/timeFilter.js";
 import {
@@ -44,7 +43,7 @@ interface PaginationOptions {
   }
 
   interface PaginatedLeadsResult {
-    leads: ILeadDocument[];
+    leads: Partial<ILead>[];
     pagination: {
       currentPage: number;
       totalPages: number;
@@ -124,14 +123,14 @@ public async updateConversionRatesAndLeadScoresForClient(clientId: string): Prom
     console.log(`[CR Update] Starting update for clientId: ${clientId}`);
     
     // 1. Fetch all leads for client
-    const leads = await LeadModel.find({ clientId }).lean().exec();
+    const leads = await leadRepository.getLeadsByClientId(clientId);
     if (leads.length === 0) {
       console.log(`[CR Update] No leads found for clientId: ${clientId}`);
       return { updatedConversionRates: 0, updatedLeads: 0, totalProcessedLeads: 0, errors: [] };
     }
 
     // 2. Calculate conversion rates for all unique fields
-    const conversionData = this.processLeads(leads, clientId);
+    const conversionData = this.processLeads(leads as ILead[], clientId);
     console.log(`[CR Update] Calculated ${conversionData.length} conversion rates for clientId: ${clientId}`);
 
     // 3. Upsert conversion rates to DB
@@ -148,7 +147,7 @@ public async updateConversionRatesAndLeadScoresForClient(clientId: string): Prom
     // 6. Bulk update only changed leads
     let modifiedCount = 0;
     if (bulkOps.length > 0) {
-      const result = await LeadModel.bulkWrite(bulkOps);
+      const result = await leadRepository.bulkWriteLeads(bulkOps);
       modifiedCount = result.modifiedCount;
       console.log(`[CR Update] Updated ${modifiedCount} leads with new scores and conversionRates for clientId: ${clientId}`);
     } else {
@@ -243,7 +242,7 @@ public async updateConversionRatesAndLeadScoresForClient(clientId: string): Prom
   console.log("query", query);
 
   // Fetch filtered leads
-  const leads = await LeadModel.find(query).lean().exec();
+  const leads = await leadRepository.findLeads(query);
 
   console.log("leads", leads);
   
@@ -270,7 +269,7 @@ public async hasLeadData(clientId: string): Promise<boolean> {
   if (!mongoose.Types.ObjectId.isValid(clientId)) {
     return false; // Invalid clientId can't have leads
   }
-  return (await LeadModel.exists({ clientId })) !== null;
+  return await leadRepository.existsByClientId(clientId);
 }
 
 public async getPerformanceTables(
@@ -387,18 +386,14 @@ private buildLeadUpdateBulkOps(leads: any[], conversionRatesMap: any): {
 }
 
 public async upsertLead(query: Pick<ILeadDocument, "clientId" | "adSetName" | "email" | "phone" | "service" | "adName" | "zip">, payload: Partial<ILeadDocument>) {
-  const existingLead = await LeadModel.findOne(query).lean().exec();
+  const existingLead: Partial<ILead> | null = (await leadRepository.findLeads(query))[0] || null;
   
   if (existingLead) {
     const updatePayload = { ...payload };
     updatePayload.leadScore = existingLead.leadScore;
     updatePayload.conversionRates = existingLead.conversionRates;
     
-    return await LeadModel.findOneAndUpdate(
-      query,
-      { $set: updatePayload },
-      { new: true }
-    );
+    return await leadRepository.updateLead(query, updatePayload);
   } else {
     if (!payload.clientId || !payload.service || !payload.adSetName || !payload.adName || (!payload.phone && !payload.email)) {
       throw new Error('Missing required fields: clientId, service, adSetName, adName, and at least phone or email');
@@ -437,15 +432,7 @@ public async upsertLead(query: Pick<ILeadDocument, "clientId" | "adSetName" | "e
 
 
     // New leads now include both lead scores and conversion rates
-    return await LeadModel.findOneAndUpdate(
-      query,
-      { $set: newLeadPayload },
-      {
-        new: true,
-        upsert: true,
-        setDefaultsOnInsert: true,
-      }
-    );
+    return await leadRepository.upsertLead(query, newLeadPayload);
   }
 }
 
@@ -468,54 +455,16 @@ private async getAdSetPerformanceWithPagination(
     hasPrev: boolean;
   };
 }> {
-  const pipeline: PipelineStage[] = [
-    { $match: query },
-    {
-      $group: {
-        _id: '$adSetName',
-        total: { $sum: 1 },
-        estimateSet: {
-          $sum: { $cond: [{ $eq: ['$status', 'estimate_set'] }, 1, 0] }
-        }
-      }
-    },
-    {
-      $project: {
-        adSetName: '$_id',
-        total: 1,
-        estimateSet: 1,
-        percentage: {
-          $multiply: [
-            { $divide: ['$estimateSet', '$total'] },
-            100
-          ]
-        },
-        _id: 0
-      }
-    }
-  ];
+    // 1. Call the new repository function to execute the aggregation and get the raw results
+  const { totalCount, data } = await leadRepository.getAdSetPerformance(
+    query, 
+    page, 
+    limit, 
+    sortOptions
+  );
 
-  // Add sorting
-  if (sortOptions?.showTopRanked) {
-    pipeline.push({ $sort: { percentage: -1, estimateSet: -1 } });
-  } else if (sortOptions?.adSetSortField) {
-    const sortField = sortOptions.adSetSortField === 'percentage'
-      ? 'percentage'
-      : sortOptions.adSetSortField;
-
-    const sortOrder: 1 | -1 = sortOptions.adSetSortOrder === 'asc' ? 1 : -1;
-    pipeline.push({ $sort: { [sortField]: sortOrder } as Record<string, 1 | -1> });
-  }
-
-  // Get total count for pagination
-  const totalResults = await LeadModel.aggregate([...pipeline, { $count: 'total' }]);
-  const totalCount = totalResults[0]?.total || 0;
+  // 2. Calculate pagination details (remains in the service layer)
   const totalPages = Math.ceil(totalCount / limit);
-
-  // Add pagination
-  pipeline.push({ $skip: (page - 1) * limit }, { $limit: limit });
-
-  const data = await LeadModel.aggregate(pipeline);
 
   return {
     data: data.map(item => ({
@@ -549,52 +498,15 @@ private async getAdNamePerformanceWithPagination(
     hasPrev: boolean;
   };
 }> {
-  const pipeline: PipelineStage[] = [
-    { $match: query },
-    {
-      $group: {
-        _id: { adName: '$adName', adSetName: '$adSetName' },
-        total: { $sum: 1 },
-        estimateSet: {
-          $sum: { $cond: [{ $eq: ['$status', 'estimate_set'] }, 1, 0] }
-        }
-      }
-    },
-    {
-      $project: {
-        adName: '$_id.adName',
-        adSetName: '$_id.adSetName',
-        total: 1,
-        estimateSet: 1,
-        percentage: {
-          $multiply: [
-            { $divide: ['$estimateSet', '$total'] },
-            100
-          ]
-        },
-        _id: 0
-      }
-    }
-  ];
+  // 1. Call the new repository function to execute the aggregation
+  const { totalCount, data } = await leadRepository.getAdNamePerformance(
+    query, 
+    page, 
+    limit, 
+    sortOptions
+  );
 
-  // Add sorting (similar to adSet)
-  if (sortOptions?.showTopRanked) {
-    pipeline.push({ $sort: { percentage: -1, estimateSet: -1 } });
-  } else if (sortOptions?.adNameSortField) {
-    const sortField = sortOptions.adNameSortField === 'percentage' ? 'percentage' : sortOptions.adNameSortField;
-    const sortOrder = sortOptions.adNameSortOrder === 'asc' ? 1 : -1;
-    pipeline.push({ $sort: { [sortField]: sortOrder } });
-  }
-
-  // Get total count for pagination
-  const totalResults = await LeadModel.aggregate([...pipeline, { $count: 'total' }]);
-  const totalCount = totalResults[0]?.total || 0;
   const totalPages = Math.ceil(totalCount / limit);
-
-  // Add pagination
-  pipeline.push({ $skip: (page - 1) * limit }, { $limit: limit });
-
-  const data = await LeadModel.aggregate(pipeline);
 
   return {
     data: data.map(item => ({
@@ -803,15 +715,13 @@ private getEmptyAnalyticsResult(): AnalyticsResult {
   const sortOrder = pagination.sortOrder === 'desc' ? -1 : 1;
 
   // run count + leads query in parallel
-  const [totalCount, leads] = await Promise.all([
-    LeadModel.countDocuments(query),
-    LeadModel.find(query)
-      .sort({ [sortField]: sortOrder })
-      .skip(skip)
-      .limit(pagination.limit)
-      .lean()
-      .exec()
-  ]);
+const { totalCount, leads } = await leadRepository.findLeadsWithCount({
+  query,// isDeleted is automatically added in the repository
+  sortField: sortField,
+  sortOrder: sortOrder,
+  skip: skip,
+  limit: pagination.limit
+});
 
   const totalPages = Math.max(1, Math.ceil(totalCount / pagination.limit));
 
@@ -859,24 +769,14 @@ public async fetchLeadFiltersAndCounts(
   }
 
   // run distinct queries in parallel
-  const [services, adSetNames, adNames, statuses, unqualifiedLeadReasons, statusAgg] =
-    await Promise.all([
-      LeadModel.distinct("service", query),
-      LeadModel.distinct("adSetName", query),
-      LeadModel.distinct("adName", query),
-      LeadModel.distinct("status", query),
-      LeadModel.distinct("unqualifiedLeadReason", { ...query, status: "unqualified" }),
-      // aggregation for status counts
-      LeadModel.aggregate([
-        { $match: query },
-        {
-          $group: {
-            _id: "$status",
-            count: { $sum: 1 }
-          }
-        }
-      ])
-    ]);
+  const { 
+      services, 
+      adSetNames, 
+      adNames, 
+      statuses, 
+      unqualifiedLeadReasons, 
+      statusAgg 
+  } = await leadRepository.getLeadFilterOptionsAndStats(query);
 
   // normalize status counts
   const statusCountsMap = statusAgg.reduce((acc, item) => {
@@ -937,7 +837,7 @@ public async fetchLeadFiltersAndCounts(
           }
         }));
 
-        await LeadModel.bulkWrite(bulkOps);
+        await leadRepository.bulkWriteLeads(bulkOps);
         
         // Update the leads array with score 0
         leads.forEach(lead => {
@@ -964,7 +864,7 @@ public async fetchLeadFiltersAndCounts(
       });
 
       // Bulk update lead scores in database
-      await LeadModel.bulkWrite(bulkOps);
+      await leadRepository.bulkWriteLeads(bulkOps);
       console.log(`Updated lead scores for ${bulkOps.length} leads`);
 
       // Update the leads array with calculated scores
@@ -999,7 +899,7 @@ public async recalculateAllLeadScores(clientId: string): Promise<{
     console.log(`Starting lead score recalculation for client ${clientId}`);
     
     // Get all leads for this client
-    const allLeads = await LeadModel.find({ clientId }).lean().exec();
+    const allLeads = await leadRepository.getLeadsByClientId(clientId);
     
     if (allLeads.length === 0) {
       return {
@@ -1014,26 +914,28 @@ public async recalculateAllLeadScores(clientId: string): Promise<{
     
     if (conversionRates.length === 0) {
       console.log(`No conversion rates found for client ${clientId}, setting all lead scores to 0`);
-      
-      await LeadModel.updateMany(
-        { clientId },
-        { 
+
+        const updatePayload = { 
           $set: { 
-            leadScore: 0,
-            conversionRates: {
-              service: 0,
-              adSetName: 0,
-              adName: 0,
-              leadDate: 0,
-              zip: 0
-            }
+              leadScore: 0,
+              conversionRates: {
+                  service: 0,
+                  adSetName: 0,
+                  adName: 0,
+                  leadDate: 0,
+                  zip: 0
+              }
           } 
-        }
-      );
+        };
+      
+            const updateResult = await leadRepository.updateManyLeads(
+                { clientId }, // The query
+                updatePayload  // The update
+            );
       
       return {
         totalLeads: allLeads.length,
-        updatedLeads: allLeads.length,
+        updatedLeads: updateResult.length,
         errors: []
       };
     }
@@ -1047,7 +949,7 @@ public async recalculateAllLeadScores(clientId: string): Promise<{
     // Bulk update only changed leads
     let modifiedCount = 0;
     if (bulkOps.length > 0) {
-      const result = await LeadModel.bulkWrite(bulkOps);
+      const result = await leadRepository.bulkWriteLeads(bulkOps);
       modifiedCount = result.modifiedCount;
       console.log(`Recalculated scores and conversion rates for ${modifiedCount} leads for client ${clientId}`);
     } else {
@@ -1088,10 +990,7 @@ public async recalculateAllLeadScores(clientId: string): Promise<{
     else if (endDate) query.leadDate = { $lte: endDate };
 
     // Get leads with optimized query
-    const leads = await LeadModel.find(query)
-      .sort({ leadDate: 1, _id: 1 })
-      .lean()
-      .exec();
+    const leads = await leadRepository.getSortedLeads(query);
 
     // Calculate and store missing lead scores automatically
     if (clientId) {
@@ -1248,7 +1147,7 @@ public async recalculateAllLeadScores(clientId: string): Promise<{
 
 
   public async createLead(payload: ILead): Promise<ILeadDocument> {
-    return await LeadModel.create(payload);
+    return await leadRepository.createLead(payload);
   }
 
   // Bulk upsert leads with optional duplicate prevention based on email/phone uniqueness
@@ -1307,7 +1206,7 @@ public async recalculateAllLeadScores(clientId: string): Promise<{
       };
     });
 
-    const result = await LeadModel.bulkWrite(bulkOps, { ordered: false });
+    const result = await leadRepository.bulkWriteLeads(bulkOps, { ordered: false });
     
     // Get statistics from bulkWrite result
     const newInserts = result.upsertedCount || 0;
@@ -1333,7 +1232,7 @@ public async recalculateAllLeadScores(clientId: string): Promise<{
     id: string,
     data: Partial<Pick<ILead, "status" | "unqualifiedLeadReason">>
   ): Promise<ILeadDocument> {
-    const existing = await LeadModel.findById(id);
+    const existing = await leadRepository.getLeadById(id);
     if (!existing) throw new Error("Lead not found");
 
     if (typeof data.status !== "undefined") {
@@ -1353,10 +1252,7 @@ public async recalculateAllLeadScores(clientId: string): Promise<{
   }
 
   public async deleteLeads(ids: string[]): Promise<{ deletedCount: number }> {
-    const result = await LeadModel.updateMany(
-      { _id: { $in: ids } },
-      { $set: { isDeleted: true, deletedAt: new Date() } }
-    );
+    const result = await leadRepository.bulkDeleteLeads(ids);
     return { deletedCount: result.modifiedCount || 0 };
   }
 
@@ -1368,7 +1264,7 @@ public async recalculateAllLeadScores(clientId: string): Promise<{
    * Get all unique client IDs from leads collection
    */
   public async getAllClientIds(): Promise<string[]> {
-    const clientIds = await LeadModel.distinct("clientId").exec();
+    const clientIds = await leadRepository.getDistinctClientIds();
     return clientIds.filter(id => id); // Remove any null/undefined values
   }
 
@@ -1376,7 +1272,7 @@ public async recalculateAllLeadScores(clientId: string): Promise<{
    * Get all leads for a specific client from database
    */
   public async getAllLeadsForClient(clientId: string): Promise<ILead[]> {
-    const leads = await LeadModel.find({ clientId }).lean().exec();
+    const leads = await leadRepository.getLeadsByClientId(clientId);
     return leads as ILead[];
   }
 }
