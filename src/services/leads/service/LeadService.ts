@@ -234,12 +234,12 @@ export class LeadService {
 
     // Filters
     if (filters.service) query.service = filters.service;
-    if (filters.adSetName) query.adSetName = { $regex: filters.adSetName, $options: 'i' };
-    if (filters.adName) query.adName = { $regex: filters.adName, $options: 'i' };
+    if (filters.adSetName) query.adSetName = filters.adSetName
+    if (filters.adName) query.adName = filters.adName
     if (filters.status) query.status = filters.status;
     if (filters.unqualifiedLeadReason) {
       query.status = 'unqualified';
-      query.unqualifiedLeadReason = { $regex: filters.unqualifiedLeadReason, $options: 'i' };
+      query.unqualifiedLeadReason = filters.unqualifiedLeadReason;
     }
 
     // Pagination setup

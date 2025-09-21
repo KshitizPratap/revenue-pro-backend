@@ -164,15 +164,15 @@ if (req.query.clientId) {
       // Filters
       const filters: any = {};
       if (typeof req.query.service === "string")
-        filters.service = req.query.service;
+        filters.service = req.query.service.trim();
       if (typeof req.query.adSetName === "string")
-        filters.adSetName = req.query.adSetName;
+        filters.adSetName = req.query.adSetName.trim();
       if (typeof req.query.adName === "string")
-        filters.adName = req.query.adName;
+        filters.adName = req.query.adName.trim();
       if (typeof req.query.status === "string")
-        filters.status = req.query.status;
+        filters.status = req.query.status.trim();
       if (typeof req.query.unqualifiedLeadReason === "string")
-        filters.unqualifiedLeadReason = req.query.unqualifiedLeadReason;
+        filters.unqualifiedLeadReason = req.query.unqualifiedLeadReason.trim();
 
       // Fetch paginated leads
       const result = await this.service.getLeadsPaginated(
@@ -431,6 +431,9 @@ if (req.query.clientId) {
       if (!payload.status) {
         payload.status = "new";
       }
+
+      payload.isDeleted = false;
+      payload.deletedAt = null;
 
       // Validate status
       if (!["new", "in_progress", "estimate_set", "unqualified"].includes(payload.status)) {
