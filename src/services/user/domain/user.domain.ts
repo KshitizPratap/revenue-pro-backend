@@ -10,6 +10,8 @@ export interface IUser extends Document {
   hasLoggedIn: boolean;
   name: string;
   leadSheetUrl?: string;
+  status?: 'active' | 'deleted';
+  deletedAt?: Date;
   created_at: Date;
   updated_at: Date;
   comparePassword(candidatePassword: string): Promise<boolean>;

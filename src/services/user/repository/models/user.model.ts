@@ -31,6 +31,15 @@ const userSchema = new Schema<IUser, IUserModel>(
       type: String,
       required: false,
     },
+    status: {
+      type: String,
+      enum: ['active', 'deleted'],
+      default: 'active',
+    },
+    deletedAt: {
+      type: Date,
+      default: null,
+    },
   },
   {
     timestamps: { createdAt: "created_at", updatedAt: "updated_at" },
