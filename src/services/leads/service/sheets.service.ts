@@ -263,8 +263,8 @@ export class SheetsService {
         const status: LeadStatus = isEstimateSet ? 'estimate_set' : 'unqualified';
         const unqualifiedLeadReason = isEstimateSet ? '' : String(row["Unqualified Lead Reason"] || "");
 
-        // Parse date using utility helper function
-        const leadDate = utils.parseDate(row["Lead Date"], sheetRowNumber);        
+        // Parse date using utility helper function (assume UTC for sheets inputs)
+        const leadDate = utils.parseDate(row["Lead Date"], sheetRowNumber);
         // Create raw lead data and sanitize it at entry point
         const rawLeadData = {
           status,

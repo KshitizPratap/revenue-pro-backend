@@ -31,17 +31,17 @@ interface AnalyticsResult {
 /**
  * Create timezone-aware date range query
  */
-export function createDateRangeQuery(startDate?: string, endDate?: string): any {
+export function createDateRangeQuery(startDate: string | undefined, endDate: string | undefined, timezone: string): any {
   if (!startDate && !endDate) return {};
   
   if (startDate && endDate) {
-    const dateRange = TimezoneUtils.createDateRangeQuery(startDate, endDate);
+    const dateRange = TimezoneUtils.createDateRangeQuery(startDate, endDate, timezone);
     return dateRange.leadDate;
   } else if (startDate) {
-    const dateRange = TimezoneUtils.createDateRangeQuery(startDate, startDate);
+    const dateRange = TimezoneUtils.createDateRangeQuery(startDate, startDate, timezone);
     return { $gte: dateRange.leadDate.$gte };
   } else if (endDate) {
-    const dateRange = TimezoneUtils.createDateRangeQuery(endDate, endDate);
+    const dateRange = TimezoneUtils.createDateRangeQuery(endDate, endDate, timezone);
     return { $lte: dateRange.leadDate.$lte };
   }
   

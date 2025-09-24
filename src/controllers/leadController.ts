@@ -2,6 +2,7 @@ import { Request, Response } from "express";
 import { CombinedLeadService } from "../services/leads/service/index.js";
 import { SheetsService } from "../services/leads/service/sheets.service.js";
 import utils from "../utils/utils.js";
+import { TimezoneUtils } from "../utils/timezoneUtils.js";
 import { conversionRateRepository } from "../services/leads/repository/index.js";
 import { sanitizeLeadData } from "../services/leads/utils/leads.util.js";
 import mongoose from "mongoose";
@@ -143,6 +144,8 @@ if (req.query.clientId) {
    */
   async getLeadsPaginated(req: Request, res: Response): Promise<void> {
     try {
+      const userTimeZoneHeader = req.header('X-Timezone');
+      const timezone = TimezoneUtils.extractTimeZoneFromHeader(userTimeZoneHeader);
       const clientId =
         typeof req.query.clientId === "string" ? req.query.clientId : undefined;
       const startDate =
@@ -179,7 +182,8 @@ if (req.query.clientId) {
         startDate,
         endDate,
         { page, limit, sortBy, sortOrder },
-        filters
+        filters,
+        timezone
       );
 
       // Fetch grouped conversion rates for frontend
@@ -233,6 +237,8 @@ if (req.query.clientId) {
 
   async getLeadFiltersAndCounts(req: Request, res: Response): Promise<void> {
     try {
+      const userTimeZoneHeader = req.header('X-Timezone');
+      const timezone = TimezoneUtils.extractTimeZoneFromHeader(userTimeZoneHeader);
       // Check if clientId is missing or empty
       if (!req.query.clientId) {
         utils.sendErrorResponse(res, {
@@ -263,7 +269,8 @@ if (req.query.clientId) {
       const data = await this.service.fetchLeadFiltersAndCounts(
         clientId,
         startDate,
-        endDate
+        endDate,
+        timezone
       );
       utils.sendSuccessResponse(res, 200, {
         success: true,
@@ -278,6 +285,8 @@ if (req.query.clientId) {
 
   async getLeads(req: Request, res: Response): Promise<void> {
     try {
+      const userTimeZoneHeader = req.header('X-Timezone');
+      const timezone = TimezoneUtils.extractTimeZoneFromHeader(userTimeZoneHeader);
       const clientId =
         typeof req.query.clientId === "string" ? req.query.clientId : undefined;
   
@@ -290,7 +299,7 @@ if (req.query.clientId) {
         typeof req.query.endDate === "string" ? req.query.endDate : undefined;
   
       // Fetch leads
-      const leads = await this.service.getLeads(clientId, startDate, endDate);
+      const leads = await this.service.getLeads(clientId, startDate, endDate, timezone);
   
       // Fetch conversion rates for this client
       const conversionRates = await conversionRateRepository.getConversionRates(
@@ -347,10 +356,19 @@ if (req.query.clientId) {
       const clientId =
         typeof req.query.clientId === "string" ? req.query.clientId : undefined;
       const { timeFilter = 'all' } = req.query;
+      const userTimeZoneHeader = req.header('X-Timezone');
+      if (!userTimeZoneHeader || typeof userTimeZoneHeader !== 'string' || userTimeZoneHeader.trim() === '') {
+        utils.sendErrorResponse(res, {
+          message: 'X-Timezone header is required',
+          statusCode: 400
+        });
+        return;
+      }
 
       const analytics = await this.service.getLeadAnalytics(
       clientId as string, 
-      timeFilter as any
+      timeFilter as any,
+      userTimeZoneHeader
     );
     res.json({
       success: true,
@@ -378,6 +396,15 @@ if (req.query.clientId) {
       adNameSortOrder = 'desc',
       showTopRanked = 'false'
     } = req.query;
+
+    const userTimeZoneHeader = req.header('X-Timezone');
+    if (!userTimeZoneHeader || typeof userTimeZoneHeader !== 'string' || userTimeZoneHeader.trim() === '') {
+      utils.sendErrorResponse(res, {
+        message: 'X-Timezone header is required',
+        statusCode: 400
+      });
+      return;
+    }
 
     const performanceData = await this.service.getPerformanceTables(
       clientId as string,

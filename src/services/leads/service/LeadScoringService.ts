@@ -12,8 +12,7 @@ import {
   getMonthIndex,
   isEmptyValue,
   type LeadKeyField,
-  type UniqueKey,
-  getDateConversionRateFromMap
+  type UniqueKey
 } from "../utils/leads.util.js";
 
 // Types for scoring operations
@@ -429,9 +428,8 @@ export class LeadScoringService {
     const adSetNameRate = getConversionRateFromMap(conversionRatesMap, 'adSetName', lead.adSetName || '');
     const adNameRate = getConversionRateFromMap(conversionRatesMap, 'adName', lead.adName || '');
     
-    // leadDate is now a UTC ISO string, convert to CST for month extraction
-    const cstDate = TimezoneUtils.convertUTCStringToCST(lead.leadDate);
-    const monthName = cstDate.toLocaleString("en-US", { month: "long" });
+    const dt = new Date(lead.leadDate);
+    const monthName = dt.toLocaleString("en-US", { month: "long" });
     const leadDateRate = getConversionRateFromMap(conversionRatesMap, 'leadDate', monthName);
     const zipRate = getConversionRateFromMap(conversionRatesMap, 'zip', lead.zip || '');
 
