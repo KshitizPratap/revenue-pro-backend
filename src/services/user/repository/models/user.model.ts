@@ -31,9 +31,10 @@ const userSchema = new Schema<IUser, IUserModel>(
       type: String,
       required: false,
     },
-    isDeleted: {
-      type: Boolean,
-      default: false,
+    status: {
+      type: String,
+      enum: ['active', 'deleted'],
+      default: 'active',
     },
     deletedAt: {
       type: Date,

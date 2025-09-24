@@ -36,7 +36,7 @@ export class UserRepositoryService {
       if (!email) {
         return null;
       }
-      return await User.findOne({ email, isDeleted: false });
+      return await User.findOne({ email, status: 'active' });
     } catch (error) {
       throw utils.ThrowableError(error);
     }
@@ -48,7 +48,7 @@ export class UserRepositoryService {
         return null;
       }
       // Find by id and not deleted
-      const user = await User.findOne({ _id: id, isDeleted: false });
+  const user = await User.findOne({ _id: id, status: 'active' });
       return user;
     } catch (error) {
       throw utils.ThrowableError(error);
@@ -78,7 +78,7 @@ export class UserRepositoryService {
 
   async getAllUsers(role?: string): Promise<IUser[]> {
     try {
-      const query: any = { isDeleted: false };
+  const query: any = { status: 'active' };
       if (role) query.role = role;
       return await User.find(query);
     } catch (error) {
@@ -121,7 +121,7 @@ export class UserRepositoryService {
   }
 
   public async deleteUser(userId: string): Promise<void> {
-    // Soft delete: set isDeleted to true and deletedAt to current date
-    await User.findByIdAndUpdate(userId, { $set: { isDeleted: true, deletedAt: Date.now() } });
+  // Soft delete: set status to 'deleted' and deletedAt to current date
+  await User.findByIdAndUpdate(userId, { $set: { status: 'deleted', deletedAt: Date.now() } });
   }
 }

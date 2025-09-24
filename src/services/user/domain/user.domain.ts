@@ -10,7 +10,7 @@ export interface IUser extends Document {
   hasLoggedIn: boolean;
   name: string;
   leadSheetUrl?: string;
-  isDeleted?: boolean;
+  status?: 'active' | 'deleted';
   deletedAt?: Date;
   created_at: Date;
   updated_at: Date;

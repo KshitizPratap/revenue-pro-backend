@@ -34,7 +34,7 @@ export const verifyTokenMiddleware = async (
     }
 
     const result = await verifyToken(accessToken.toString(), refreshToken.toString());
-    if (!result?.user || result?.user.isDeleted) {
+    if (!result?.user || result?.user.status === 'deleted') {
       throw new Error("User not found");
     }
     req.context.setUserId(result?.user?._id.toString());

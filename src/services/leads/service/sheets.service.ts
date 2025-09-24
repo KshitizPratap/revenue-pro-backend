@@ -434,13 +434,29 @@ export class SheetsService {
     const sheetData = await this.processSheetData(sheetUrl, clientId);
     let { leads, stats: sheetStats, conversionRateInsights } = sheetData;
 
-    // ✅ Normalize status + unqualifiedLeadReason only for sheet processing
+    // Fetch all existing leads for the client
+    const existingLeads = await getAllLeadsForClientFn(clientId);
+    // Create a lookup for quick access
+    const leadLookup = new Map();
+    existingLeads.forEach(lead => {
+      // Use a unique key, e.g., email or phone + adSetName + service
+      const key = `${lead.email || ''}_${lead.phone || ''}_${lead.adSetName}_${lead.service}`;
+      leadLookup.set(key, lead);
+    });
+
+    // Normalize status + unqualifiedLeadReason only for sheet processing
     leads = leads.map((lead) => {
       const isEstimateSet = lead.status === "estimate_set";
       const hasUnqualifiedReason =
         lead.unqualifiedLeadReason && lead.unqualifiedLeadReason.trim() !== "";
 
       if (!isEstimateSet && !hasUnqualifiedReason) {
+        // Preserve in_progress status if DB is in_progress and sheet is new
+        const key = `${lead.email || ''}_${lead.phone || ''}_${lead.adSetName}_${lead.service}`;
+        const existing = leadLookup.get(key);
+        if (existing && existing.status === "in_progress") {
+          return { ...lead, status: "in_progress" };
+        }
         return {
           ...lead,
           status: "new",
