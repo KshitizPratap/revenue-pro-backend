@@ -205,7 +205,7 @@ export class LeadService {
     const query: any = {};
     if (clientId) query.clientId = clientId;
     if (startDate || endDate) {
-      query.leadDate = this.createDateRangeQuery(startDate, endDate, timezone || 'UTC');
+      query.leadDate = this.createDateRangeQuery(startDate, endDate, timezone);
     }
 
     const leads = await this.leadRepo.getSortedLeads(query);
@@ -230,7 +230,7 @@ export class LeadService {
 
     // Date filter - use timezone-aware date range query
     if (startDate || endDate) {
-      query.leadDate = this.createDateRangeQuery(startDate, endDate, timezone || 'UTC');
+      query.leadDate = this.createDateRangeQuery(startDate, endDate, timezone);
     }
 
     // Filters
@@ -298,7 +298,7 @@ export class LeadService {
     if (clientId) query.clientId = clientId;
 
     if (startDate || endDate) {
-      query.leadDate = this.createDateRangeQuery(startDate, endDate, timezone || 'UTC');
+      query.leadDate = this.createDateRangeQuery(startDate, endDate, timezone);
     }
 
     const { 

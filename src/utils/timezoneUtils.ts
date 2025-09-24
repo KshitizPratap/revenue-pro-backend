@@ -265,7 +265,7 @@ export class TimezoneUtils {
   public static createDateRangeQuery(
     startDate: string,
     endDate: string,
-    timezone?: string
+    timezone: string
   ): { leadDate: { $gte: string; $lte: string } } {
     const tz = timezone && typeof timezone === 'string' && timezone.trim() !== '' ? timezone : LEAD_TIMEZONE;
 
