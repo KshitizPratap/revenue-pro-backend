@@ -426,8 +426,8 @@ export class SheetsService {
         // Preserve in_progress status if DB is in_progress and sheet is new
         const key = `${lead.email || ''}_${lead.phone || ''}_${lead.adSetName}_${lead.service}`;
         const existing = leadLookup.get(key);
-        if (existing && existing.status === "in_progress") {
-          return { ...lead, status: "in_progress" };
+        if (existing) {
+          return { ...lead, status: existing.status };
         }
         return {
           ...lead,
