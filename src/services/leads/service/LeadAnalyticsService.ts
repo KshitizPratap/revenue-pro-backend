@@ -136,6 +136,7 @@ export class LeadAnalyticsService {
   async getPerformanceTables(
     clientId: string,
     commonTimeFilter: 'all' | '7' | '14' | '30' | '60' = 'all',
+    userTimeZone: string = 'UTC',
     adSetPage: number = 1,
     adNamePage: number = 1,
     adSetItemsPerPage: number = 15,
@@ -154,7 +155,11 @@ export class LeadAnalyticsService {
     if (commonTimeFilter !== 'all') {
       const daysAgo = new Date();
       daysAgo.setDate(daysAgo.getDate() - parseInt(commonTimeFilter));
-      query.leadDate = { $gte: daysAgo.toISOString().split('T')[0] };
+      const startDate = format(daysAgo, 'yyyy-MM-dd');
+      const dateRangeQuery = TimezoneUtils.createDateRangeQuery(startDate, undefined, userTimeZone);
+      if (dateRangeQuery.leadDate) {
+        query.leadDate = dateRangeQuery.leadDate;
+      }
     }
 
     // Use aggregation pipelines for better performance
