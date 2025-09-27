@@ -189,19 +189,20 @@ export class LeadAnalyticsService {
    */
   private async processLeadAnalytics(leads: any[]): Promise<AnalyticsResult> {
     const totalLeads = leads.length;
-    const estimateSetLeads = leads.filter(lead => lead.status === 'estimate_set');
-    const estimateSetCount = estimateSetLeads.length;
-    const unqualifiedLeads = leads.filter(lead => lead.status === 'unqualified');
-    const unqualifiedCount = unqualifiedLeads.length;
-    const estimateSetRate = ((estimateSetCount / (unqualifiedCount+estimateSetCount)) * 100).toFixed(1);
+    const estimateSetCount = leads.filter(lead => lead.status === 'estimate_set').length;
+    const unqualifiedCount = leads.filter(lead => lead.status === 'unqualified').length;
+    const estimateSetRate = ((estimateSetCount / (unqualifiedCount + estimateSetCount)) * 100).toFixed(1);
 
     // Process each analytics section in parallel
     const [zipData, serviceData, leadDateData, dayOfWeekData, ulrData] = await Promise.all([
-      this.processZipAnalysis(estimateSetLeads, estimateSetCount),
-      this.processServiceAnalysis(estimateSetLeads, estimateSetCount),
-      this.processLeadDateAnalysis(estimateSetLeads, estimateSetCount),
+      this.processZipAnalysis(leads),
+      this.processServiceAnalysis(leads),
+      this.processLeadDateAnalysis(leads),
       this.processDayOfWeekAnalysis(leads),
-      this.processUnqualifiedReasonsAnalysis(unqualifiedLeads, unqualifiedCount)
+      this.processUnqualifiedReasonsAnalysis(
+        leads.filter(lead => lead.status === 'unqualified'),
+        unqualifiedCount
+      )
     ]);
 
     return {
@@ -217,24 +218,22 @@ export class LeadAnalyticsService {
   /**
    * Process ZIP code analysis
    */
-  private async processZipAnalysis(estimateSetLeads: any[], estimateSetCount: number) {
-    const zipAnalysis = estimateSetLeads.reduce((acc, lead) => {
-      if (lead.zip) acc[lead.zip] = (acc[lead.zip] || 0) + 1;
-      return acc;
-    }, {});
-    // Find unqualified count for each zip
-    const unqualifiedByZip = estimateSetLeads.reduce((acc, lead) => {
-      if (lead.zip && lead.status === 'unqualified') acc[lead.zip] = (acc[lead.zip] || 0) + 1;
-      return acc;
-    }, {});
-    return Object.entries(zipAnalysis)
-      .map(([zip, count]: [string, any]) => {
-        const unqualified = unqualifiedByZip[zip] || 0;
-        const denominator = count + unqualified;
+  private async processZipAnalysis(leads: any[]) {
+    // Group by zip
+    const zipGroups: Record<string, { estimateSet: number; unqualified: number }> = {};
+    for (const lead of leads) {
+      if (!lead.zip) continue;
+      if (!zipGroups[lead.zip]) zipGroups[lead.zip] = { estimateSet: 0, unqualified: 0 };
+      if (lead.status === 'estimate_set') zipGroups[lead.zip].estimateSet += 1;
+      if (lead.status === 'unqualified') zipGroups[lead.zip].unqualified += 1;
+    }
+    return Object.entries(zipGroups)
+      .map(([zip, { estimateSet, unqualified }]) => {
+        const denominator = estimateSet + unqualified;
         return {
           zip,
-          count,
-          percentage: denominator > 0 ? ((count / denominator) * 100).toFixed(1) : '0.0'
+          count: estimateSet,
+          percentage: denominator > 0 ? ((estimateSet / denominator) * 100).toFixed(1) : '0.0'
         };
       })
       .sort((a, b) => b.count - a.count);
@@ -243,24 +242,21 @@ export class LeadAnalyticsService {
   /**
    * Process service analysis
    */
-  private async processServiceAnalysis(estimateSetLeads: any[], estimateSetCount: number) {
-    const serviceAnalysis = estimateSetLeads.reduce((acc, lead) => {
-      acc[lead.service] = (acc[lead.service] || 0) + 1;
-      return acc;
-    }, {});
-    // Find unqualified count for each service
-    const unqualifiedByService = estimateSetLeads.reduce((acc, lead) => {
-      if (lead.status === 'unqualified') acc[lead.service] = (acc[lead.service] || 0) + 1;
-      return acc;
-    }, {});
-    return Object.entries(serviceAnalysis)
-      .map(([service, count]: [string, any]) => {
-        const unqualified = unqualifiedByService[service] || 0;
-        const denominator = count + unqualified;
+  private async processServiceAnalysis(leads: any[]) {
+    const serviceGroups: Record<string, { estimateSet: number; unqualified: number }> = {};
+    for (const lead of leads) {
+      if (!lead.service) continue;
+      if (!serviceGroups[lead.service]) serviceGroups[lead.service] = { estimateSet: 0, unqualified: 0 };
+      if (lead.status === 'estimate_set') serviceGroups[lead.service].estimateSet += 1;
+      if (lead.status === 'unqualified') serviceGroups[lead.service].unqualified += 1;
+    }
+    return Object.entries(serviceGroups)
+      .map(([service, { estimateSet, unqualified }]) => {
+        const denominator = estimateSet + unqualified;
         return {
           service,
-          count,
-          percentage: denominator > 0 ? ((count / denominator) * 100).toFixed(1) : '0.0'
+          count: estimateSet,
+          percentage: denominator > 0 ? ((estimateSet / denominator) * 100).toFixed(1) : '0.0'
         };
       })
       .sort((a, b) => b.count - a.count);
@@ -299,31 +295,22 @@ export class LeadAnalyticsService {
   /**
    * Process lead date analysis
    */
-  private async processLeadDateAnalysis(estimateSetLeads: any[], estimateSetCount: number) {
-    const leadDateAnalysis = estimateSetLeads.reduce((acc, lead) => {
+  private async processLeadDateAnalysis(leads: any[]) {
+    const dateGroups: Record<string, { estimateSet: number; unqualified: number }> = {};
+    for (const lead of leads) {
       const dt = new Date(lead.leadDate);
-      const date = dt.toLocaleDateString('en-US', { 
-        month: 'short', 
-        day: 'numeric' 
-      });
-      acc[date] = (acc[date] || 0) + 1;
-      return acc;
-    }, {});
-    // Find unqualified count for each date
-    const unqualifiedByDate = estimateSetLeads.reduce((acc, lead) => {
-      const cstDate = TimezoneUtils.convertUTCStringToCST(lead.leadDate);
-      const date = cstDate.toLocaleDateString('en-US', { month: 'short', day: 'numeric' });
-      if (lead.status === 'unqualified') acc[date] = (acc[date] || 0) + 1;
-      return acc;
-    }, {});
-    return Object.entries(leadDateAnalysis)
-      .map(([date, count]: [string, any]) => {
-        const unqualified = unqualifiedByDate[date] || 0;
-        const denominator = count + unqualified;
+      const date = dt.toLocaleDateString('en-US', { month: 'short', day: 'numeric' });
+      if (!dateGroups[date]) dateGroups[date] = { estimateSet: 0, unqualified: 0 };
+      if (lead.status === 'estimate_set') dateGroups[date].estimateSet += 1;
+      if (lead.status === 'unqualified') dateGroups[date].unqualified += 1;
+    }
+    return Object.entries(dateGroups)
+      .map(([date, { estimateSet, unqualified }]) => {
+        const denominator = estimateSet + unqualified;
         return {
           date,
-          count,
-          percentage: denominator > 0 ? ((count / denominator) * 100).toFixed(1) : '0.0'
+          count: estimateSet,
+          percentage: denominator > 0 ? ((estimateSet / denominator) * 100).toFixed(1) : '0.0'
         };
       })
       .sort((a, b) => new Date(a.date + ', 2024').getTime() - new Date(b.date + ', 2024').getTime());
