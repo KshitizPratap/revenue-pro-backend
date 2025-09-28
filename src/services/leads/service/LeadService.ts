@@ -20,6 +20,7 @@ interface FilterOptions {
   adName?: string;
   status?: string;
   unqualifiedLeadReason?: string;
+  name?: string
 }
 
 interface PaginatedLeadsResult {
@@ -202,7 +203,6 @@ export class LeadService {
     endDate?: string,
     pagination: PaginationOptions = { page: 1, limit: 50, sortBy: 'date', sortOrder: 'desc' },
     filters: FilterOptions = {},
-    timezone: string = 'UTC'
   ): Promise<PaginatedLeadsResult> {
     const query: any = {};
 
@@ -211,7 +211,7 @@ export class LeadService {
 
     // Date filter - use timezone-aware date range query
     if (startDate || endDate) {
-      const dateRange = TimezoneUtils.createDateRangeQuery(startDate, endDate, timezone);
+      const dateRange = createDateRangeQuery(startDate, endDate);
       if (dateRange.leadDate) {
         query.leadDate = dateRange.leadDate;
       }
@@ -226,6 +226,7 @@ export class LeadService {
       query.status = 'unqualified';
       query.unqualifiedLeadReason = filters.unqualifiedLeadReason;
     }
+    if (filters.name) query.name = filters.name;
 
     // Pagination setup
     const skip = (pagination.page - 1) * pagination.limit;
@@ -262,7 +263,6 @@ export class LeadService {
     clientId?: string,
     startDate?: string,
     endDate?: string,
-    timezone?: string
   ): Promise<{
     filterOptions: {
       services: string[];
@@ -282,7 +282,7 @@ export class LeadService {
     if (clientId) query.clientId = clientId;
 
     if (startDate || endDate) {
-      const dateRange = TimezoneUtils.createDateRangeQuery(startDate, endDate, timezone);
+      const dateRange = createDateRangeQuery(startDate, endDate);
       if (dateRange.leadDate) {
         query.leadDate = dateRange.leadDate;
       }
@@ -360,4 +360,21 @@ export class LeadService {
     return leads as ILead[];
   }
 
+}
+
+// Add this utility function in LeadService.ts or a utils file
+function createDateRangeQuery(startDate?: string, endDate?: string): { leadDate?: { $gte?: string; $lte?: string } } {
+  if (!startDate && !endDate) {
+    return {};
+  }
+  const result: { leadDate?: { $gte?: string; $lte?: string } } = {};
+  if (startDate) {
+    if (!result.leadDate) result.leadDate = {};
+    result.leadDate.$gte = startDate;
+  }
+  if (endDate) {
+    if (!result.leadDate) result.leadDate = {};
+    result.leadDate.$lte = endDate;
+  }
+  return result;
 }
