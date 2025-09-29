@@ -34,7 +34,6 @@ export class CombinedLeadService {
   }
 
   // Delegate CRUD operations to LeadService
-  async createLead(payload: any) { return this.leadService.createLead(payload); }
   async updateLead(id: string, data: any) { return this.leadService.updateLead(id, data); }
   async deleteLeads(ids: string[]) { return this.leadService.deleteLeads(ids); }
   async upsertLead(query: any, payload: any) { return this.leadService.upsertLead(query, payload); }
