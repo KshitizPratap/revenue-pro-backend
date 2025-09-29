@@ -53,12 +53,6 @@ export class LeadService {
 
   // ============= BASIC CRUD OPERATIONS =============
 
-  /**
-   * Create a single lead
-   */
-  async createLead(payload: ILead): Promise<ILeadDocument> {
-    return await this.leadRepo.createLead(payload);
-  }
 
   /**
    * Update a lead by ID
@@ -112,8 +106,8 @@ export class LeadService {
       if (!result) throw new Error("Failed to update lead");
       return result;
     } else {
-      if (!payload.clientId || !payload.service || !payload.adSetName || !payload.adName || (!payload.phone && !payload.email)) {
-        throw new Error('Missing required fields: clientId, service, adSetName, adName, and at least phone or email');
+      if (!payload.clientId || !payload.service || !payload.zip || !payload.adSetName || !payload.adName || (!payload.phone && !payload.email)) {
+        throw new Error('Missing required fields: clientId, service, zip, adSetName, adName, and at least phone or email');
       }
       
       const newLeadPayload = { ...payload };
@@ -138,6 +132,7 @@ export class LeadService {
       documents: [], 
       stats: { total: 0, newInserts: 0, duplicatesUpdated: 0 }
     };
+
 
     // Build operations based on uniqueness flag
     const bulkOps = payloads.map(lead => {
