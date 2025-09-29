@@ -422,7 +422,7 @@ if (req.query.clientId) {
 
   async updateLead(req: Request, res: Response): Promise<void> {
     try {
-      const { _id, status, unqualifiedLeadReason } = req.body;
+      const { _id, status, unqualifiedLeadReason, proposalAmount, jobBookedAmount } = req.body;
 
       if (!_id) {
         utils.sendErrorResponse(res, "_id is required for update");
@@ -441,10 +441,13 @@ if (req.query.clientId) {
         return;
       }
 
-      const updatedLead = await this.service.updateLead(_id, {
-        status,
-        unqualifiedLeadReason,
-      });
+      const updateData: any = {};
+      if (typeof status !== "undefined") updateData.status = status;
+      if (typeof unqualifiedLeadReason !== "undefined") updateData.unqualifiedLeadReason = unqualifiedLeadReason;
+      if (typeof proposalAmount !== "undefined") updateData.proposalAmount = proposalAmount;
+      if (typeof jobBookedAmount !== "undefined") updateData.jobBookedAmount = jobBookedAmount;
+
+      const updatedLead = await this.service.updateLead(_id, updateData);
 
       utils.sendSuccessResponse(res, 200, { success: true, data: updatedLead });
     } catch (error) {
