@@ -500,7 +500,7 @@ if (req.query.clientId) {
           clientId, 
           !!uniquenessByPhoneEmail,
           this.service.bulkCreateLeads.bind(this.service),
-          this.service.processLeads.bind(this.service),
+          this.service.computeConversionRatesForClient.bind(this.service),
           this.service.getAllLeadsForClient.bind(this.service)
         );
 

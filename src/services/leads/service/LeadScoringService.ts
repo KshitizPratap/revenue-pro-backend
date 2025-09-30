@@ -1,8 +1,8 @@
 import { ILead, ILeadDocument } from "../domain/leads.domain.js";
+import { isEqual } from "lodash";
 import { ILeadRepository, IConversionRateRepository } from "../repository/interfaces.js";
 import { leadRepository } from "../repository/LeadRepository.js";
 import { conversionRateRepository } from "../repository/ConversionRateRepository.js";
-import { TimezoneUtils } from "../../../utils/timezoneUtils.js";
 import {
   FIELD_WEIGHTS,
   getMonthlyName,
@@ -68,7 +68,7 @@ export class LeadScoringService {
       }
 
       // 2. Calculate conversion rates for all unique fields
-      const conversionData = this.processLeads(leads as ILead[], clientId);
+      const conversionData = this.computeConversionRatesForClient(leads as ILead[], clientId);
 
       // 3. Upsert conversion rates to DB
       const crUpsertResult = await this.conversionRateRepo.batchUpsertConversionRates(conversionData);
@@ -196,17 +196,17 @@ export class LeadScoringService {
   /**
    * Process leads to calculate conversion rates for all unique field values
    */
-  processLeads(leads: ILead[], clientId: string): ConversionData[] {
+  computeConversionRatesForClient(leads: ILead[], clientId: string): ConversionData[] {
     const result: ConversionData[] = [];
 
-    // OPTIMIZATION: Filter leads by clientId once instead of in each calculation
+    // Filter leads by clientId
     const clientLeads = leads.filter((lead) => lead.clientId === clientId);
     
     if (clientLeads.length === 0) {
-      return result; // Early return if no leads for this client
+      return result;
     }
 
-    const allKeys = this.getUniqueFieldValues(clientLeads); // Use filtered leads
+    const allKeys = this.getUniqueFieldValues(clientLeads);
 
     for (const { value: keyName, field: keyField } of allKeys) {
       const { conversionRate, pastTotalCount, pastTotalEst } =
@@ -353,59 +353,46 @@ export class LeadScoringService {
 
   /**
    * Calculate conversion rate for a specific field and value
+   * Conversion Rate = estimate_set / (estimate_set + unqualified)
    */
   private calculateConversionRate(
     clientLeads: ILead[], // Already filtered by clientId
     keyName: string,
     keyField: LeadKeyField
   ) {
-    let totalForKey = 0;
-    let yesForKey = 0;
+    let yesForKey = 0; // estimate_set count
+    let unqualifiedForKey = 0; // unqualified count
 
-    if (keyField === "leadDate") {
+    // Build a matcher for the selected key type, then do a single-pass count
+    let matches: (lead: ILead) => boolean;
+
+    if (keyField === 'leadDate') {
       const monthIndex = getMonthIndex(keyName);
-      if (monthIndex === undefined)
-        throw new Error(`Invalid month name: ${keyName}`);
-
-      // Single pass through leads for date filtering
-      for (const lead of clientLeads) {
-        const leadMonth = new Date(lead.leadDate).getMonth();
-        if (leadMonth === monthIndex) {
-          totalForKey++;
-          if (lead.status === 'estimate_set') {
-            yesForKey++;
-          }
-        }
-      }
-    } else if (keyField === "zip") {
-      // Single pass through leads for ZIP filtering
-      for (const lead of clientLeads) {
-        if (lead.zip === keyName) {
-          totalForKey++;
-          if (lead.status === 'estimate_set') {
-            yesForKey++;
-          }
-        }
-      }
+      if (monthIndex === undefined) throw new Error(`Invalid month name: ${keyName}`);
+      matches = (lead: ILead) => new Date(lead.leadDate).getMonth() === monthIndex;
     } else {
-      // Single pass through leads for field filtering
-      for (const lead of clientLeads) {
-        if (lead[keyField] === keyName) {
-          totalForKey++;
-          if (lead.status === 'estimate_set') {
-            yesForKey++;
-          }
-        }
+      const normalizedKey = String(keyName ?? '').trim().toLowerCase();
+      matches = (lead: ILead) => {
+        const raw = (lead as any)[keyField];
+        const normalizedVal = String(raw ?? '').trim().toLowerCase();
+        return normalizedVal === normalizedKey;
       }
     }
 
+    for (const lead of clientLeads) {
+      if (!matches(lead)) continue;
+      if (lead.status === 'estimate_set') yesForKey++;
+      else if (lead.status === 'unqualified') unqualifiedForKey++;
+    }
+
     // Conversion rate as decimal, rounded to 2 decimals
-    const conversionRate = totalForKey === 0 ? 0 :
-      Math.round((yesForKey / totalForKey) * 100) / 100;
+    const effectiveTotal = yesForKey + unqualifiedForKey;
+    const conversionRate = effectiveTotal === 0 ? 0 :
+      Math.round((yesForKey / effectiveTotal) * 100) / 100;
       
     return {
       conversionRate,
-      pastTotalCount: totalForKey,
+      pastTotalCount: effectiveTotal,
       pastTotalEst: yesForKey,
     };
   }
@@ -456,7 +443,7 @@ export class LeadScoringService {
   }
 
   /**
-   * Build bulk operations for lead updates
+   * Build bulk operations for lead score and conversion rates updates
    */
   private buildLeadUpdateBulkOps(leads: any[], conversionRatesMap: any): {
     bulkOps: any[];
@@ -467,9 +454,9 @@ export class LeadScoringService {
 
     for (const lead of leads) {
       const { conversionRates, leadScore } = this.calculateLeadConversionRatesAndScore(lead, conversionRatesMap);
-      // Only update if leadScore or conversionRates have changed
+      // Only update if leadScore or conversionRates have changed - performance optimization
       const leadScoreChanged = lead.leadScore !== leadScore;
-      const conversionRatesChanged = JSON.stringify(lead.conversionRates ?? {}) !== JSON.stringify(conversionRates);
+      const conversionRatesChanged = !isEqual(lead.conversionRates ?? {}, conversionRates);
       
       if (leadScoreChanged || conversionRatesChanged) {
         bulkOps.push({
