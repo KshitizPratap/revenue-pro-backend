@@ -318,9 +318,9 @@ if (req.query.clientId) {
     const adNamePage = req.query.adNamePage ? parseInt(req.query.adNamePage as string, 10) : 1;
     const adSetItemsPerPage = req.query.adSetItemsPerPage ? parseInt(req.query.adSetItemsPerPage as string, 10) : 15;
     const adNameItemsPerPage = req.query.adNameItemsPerPage ? parseInt(req.query.adNameItemsPerPage as string, 10) : 10;
-    const adSetSortField = req.query.adSetSortField as 'adSetName' | 'total' | 'estimateSet' | 'percentage' | 'totalJobBookedAmount' | 'totalProposalAmount' | undefined;
+    const adSetSortField = req.query.adSetSortField as 'adSetName' | 'total' | 'estimateSet' | 'percentage' | 'jobBookedAmount' | 'proposalAmount' | undefined;
     const adSetSortOrder = req.query.adSetSortOrder as 'asc' | 'desc' | undefined;
-    const adNameSortField = req.query.adNameSortField as 'adName' | 'total' | 'estimateSet' | 'percentage' | 'totalJobBookedAmount' | 'totalProposalAmount' | undefined;
+    const adNameSortField = req.query.adNameSortField as 'adName' | 'total' | 'estimateSet' | 'percentage' | 'jobBookedAmount' | 'proposalAmount' | undefined;
     const adNameSortOrder = req.query.adNameSortOrder as 'asc' | 'desc' | undefined;
     const showTopRanked = req.query.showTopRanked === 'true';
 
@@ -445,10 +445,10 @@ if (req.query.clientId) {
       }
 
       const updateData: any = {};
-      if (typeof status !== "undefined") updateData.status = status;
-      if (typeof unqualifiedLeadReason !== "undefined") updateData.unqualifiedLeadReason = unqualifiedLeadReason;
-      if (typeof proposalAmount !== "undefined") updateData.proposalAmount = proposalAmount;
-      if (typeof jobBookedAmount !== "undefined") updateData.jobBookedAmount = jobBookedAmount;
+      if (status) updateData.status = status;
+      if (unqualifiedLeadReason) updateData.unqualifiedLeadReason = unqualifiedLeadReason;
+      if (proposalAmount) updateData.proposalAmount = proposalAmount;
+      if (jobBookedAmount) updateData.jobBookedAmount = jobBookedAmount;
 
       const updatedLead = await this.service.updateLead(_id, updateData);
 

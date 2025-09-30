@@ -328,10 +328,6 @@ export class LeadAnalyticsService {
         ...item,
         estimateSetRate: item.percentage.toFixed(1),
         percentage: undefined,
-        jobBookedAmount: item.totalJobBookedAmount,
-        proposalAmount: item.totalProposalAmount,
-        totalJobBookedAmount: undefined,
-        totalProposalAmount: undefined,
       })),
       pagination: {
         currentPage: page,
@@ -377,10 +373,6 @@ export class LeadAnalyticsService {
         ...item,
         estimateSetRate: item.percentage.toFixed(1),
         percentage: undefined,
-        jobBookedAmount: item.totalJobBookedAmount,
-        proposalAmount: item.totalProposalAmount,
-        totalJobBookedAmount: undefined,
-        totalProposalAmount: undefined,
       })),
       pagination: {
         currentPage: page,

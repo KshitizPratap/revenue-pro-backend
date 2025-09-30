@@ -65,19 +65,19 @@ export class LeadService {
     if (!existing) throw new Error("Lead not found");
 
     // Validate amounts if provided
-    if (typeof data.proposalAmount !== "undefined") {
+    if (data.proposalAmount) {
       if (typeof data.proposalAmount !== "number" || data.proposalAmount < 0 || !isFinite(data.proposalAmount)) {
         throw new Error("proposalAmount must be a non-negative finite number");
       }
     }
     
-    if (typeof data.jobBookedAmount !== "undefined") {
+    if (data.jobBookedAmount) {
       if (typeof data.jobBookedAmount !== "number" || data.jobBookedAmount < 0 || !isFinite(data.jobBookedAmount)) {
         throw new Error("jobBookedAmount must be a non-negative finite number");
       }
     }
 
-    if (typeof data.status !== "undefined") {
+    if (data.status) {
       existing.status = data.status;
       // Clear unqualifiedLeadReason if status is not "unqualified"
       if (data.status !== 'unqualified') {
@@ -92,21 +92,21 @@ export class LeadService {
       }
     }
 
-    if (typeof data.unqualifiedLeadReason !== "undefined") {
+    if (data.unqualifiedLeadReason) {
       existing.unqualifiedLeadReason = data.unqualifiedLeadReason;
     }
 
     // Only allow proposalAmount and jobBookedAmount to be set when status is "estimate_set"
     if (existing.status === 'estimate_set') {
-      if (typeof data.proposalAmount !== "undefined") {
+      if (data.proposalAmount) {
         existing.proposalAmount = data.proposalAmount;
       }
-      if (typeof data.jobBookedAmount !== "undefined") {
+      if (data.jobBookedAmount) {
         existing.jobBookedAmount = data.jobBookedAmount;
       }
     } else {
       // Warn if user tries to set amounts when status doesn't allow it
-      if (typeof data.proposalAmount !== "undefined" || typeof data.jobBookedAmount !== "undefined") {
+      if (data.proposalAmount || data.jobBookedAmount) {
         throw new Error("proposalAmount and jobBookedAmount can only be set when status is 'estimate_set'");
       }
     }
