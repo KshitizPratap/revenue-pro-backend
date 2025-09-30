@@ -69,9 +69,6 @@ export class CombinedLeadService {
   computeConversionRatesForClient(leads: any[], clientId: string) { 
     return this.scoringService.computeConversionRatesForClient(leads, clientId); 
   }
-  async calculateAndStoreMissingLeadScores(leads: any[], clientId: string) { 
-    return this.scoringService.calculateAndStoreMissingLeadScores(leads, clientId); 
-  }
 }
 
 // Export combined service instance for backward compatibility
