@@ -1,5 +1,5 @@
-import { ILead, ILeadDocument } from "../domain/leads.domain.js";
-import { isEqual } from "lodash";
+import { ILead } from "../domain/leads.domain.js";
+import _ from "lodash";
 import { ILeadRepository, IConversionRateRepository } from "../repository/interfaces.js";
 import { leadRepository } from "../repository/LeadRepository.js";
 import { conversionRateRepository } from "../repository/ConversionRateRepository.js";
@@ -8,7 +8,6 @@ import {
   getMonthlyName,
   createConversionRatesMap,
   getConversionRateFromMap,
-  calculateLeadScore,
   getMonthIndex,
   isEmptyValue,
   type LeadKeyField,
@@ -58,7 +57,7 @@ export class LeadScoringService {
    * - Recalculates lead scores for all leads
    * - Stores conversion rates for each lead in a new field 'conversionRates'
    */
-  async updateConversionRatesAndLeadScoresForClient(clientId: string): Promise<UpdateResult> {
+  async processLeadScoresAndCRsByClientId(clientId: string): Promise<UpdateResult> {
     const errors: string[] = [];
     try {
       // 1. Fetch all leads for client
@@ -78,7 +77,7 @@ export class LeadScoringService {
       const conversionRatesMap = createConversionRatesMap(dbConversionRates);
       
       // 5. Build bulk operations using helper function
-      const { bulkOps, actuallyUpdatedLeads } = this.buildLeadUpdateBulkOps(leads, conversionRatesMap);
+      const { bulkOps, actuallyUpdatedLeads } = this.prepareLeadScoreAndCRUpdates(leads, conversionRatesMap);
 
       // 6. Bulk update only changed leads
       let modifiedCount = 0;
@@ -163,7 +162,7 @@ export class LeadScoringService {
       const conversionRatesMap = createConversionRatesMap(conversionRates);
 
       // Build bulk operations using helper function
-      const { bulkOps, actuallyUpdatedLeads } = this.buildLeadUpdateBulkOps(allLeads, conversionRatesMap);
+      const { bulkOps, actuallyUpdatedLeads } = this.prepareLeadScoreAndCRUpdates(allLeads, conversionRatesMap);
 
       // Bulk update only changed leads
       let modifiedCount = 0;
@@ -324,7 +323,7 @@ export class LeadScoringService {
   /**
    * Calculate conversion rates and lead score for a single lead
    */
-  private calculateLeadConversionRatesAndScore(lead: any, conversionRatesMap: any): {
+  private calculateLeadScoreAndCR(lead: any, conversionRatesMap: any): {
     conversionRates: {
       service: number;
       adSetName: number;
@@ -369,7 +368,7 @@ export class LeadScoringService {
   /**
    * Build bulk operations for lead score and conversion rates updates
    */
-  private buildLeadUpdateBulkOps(leads: any[], conversionRatesMap: any): {
+  private prepareLeadScoreAndCRUpdates(leads: any[], conversionRatesMap: any): {
     bulkOps: any[];
     actuallyUpdatedLeads: number;
   } {
@@ -377,10 +376,10 @@ export class LeadScoringService {
     let actuallyUpdatedLeads = 0;
 
     for (const lead of leads) {
-      const { conversionRates, leadScore } = this.calculateLeadConversionRatesAndScore(lead, conversionRatesMap);
+      const { conversionRates, leadScore } = this.calculateLeadScoreAndCR(lead, conversionRatesMap);
       // Only update if leadScore or conversionRates have changed - performance optimization
       const leadScoreChanged = lead.leadScore !== leadScore;
-      const conversionRatesChanged = !isEqual(lead.conversionRates ?? {}, conversionRates);
+      const conversionRatesChanged = !_.isEqual(lead.conversionRates ?? {}, conversionRates);
       
       if (leadScoreChanged || conversionRatesChanged) {
         bulkOps.push({
