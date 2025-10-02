@@ -136,8 +136,8 @@ export class LeadService {
       if (!result) throw new Error("Failed to update lead");
       return this.normalizeLeadAmounts(result);
     } else {
-      if (!payload.clientId || !payload.service || !payload.zip || !payload.adSetName || !payload.adName || (!payload.phone && !payload.email)) {
-        throw new Error('Missing required fields: clientId, service, zip, adSetName, adName, and at least phone or email');
+      if (!payload.clientId || !payload.service || !payload.zip || (!payload.phone && !payload.email)) {
+        throw new Error('Missing required fields: clientId, service, zip, and at least phone or email');
       }
       
       const newLeadPayload = { ...payload };
@@ -392,8 +392,7 @@ export class LeadService {
   // ============= HELPER METHODS =============
 
   /**
-   * Normalize lead amounts for backward compatibility
-   * Returns 0 for proposalAmount and jobBookedAmount if they don't exist or are invalid
+   * Normalize lead amounts by returning 0 for proposalAmount and jobBookedAmount if they don't exist or are invalid
    */
   private normalizeLeadAmounts(lead: any): any {
     const normalizeAmount = (value: any): number => {
