@@ -596,7 +596,8 @@ if (req.query.clientId) {
         return;
       }
 
-      console.log("HubSpot Subscription Request:",  { propertyValue, propertyName, objectId });
+      console.log("HubSpot Subscription Request:",  req.body);
+      console.log("HubSpot Subscription Request: objectId: ",  objectId);
 
       // Validate objectId format (HubSpot contact IDs are typically numeric)
       if (!/^\d+$/.test(objectId)) {
