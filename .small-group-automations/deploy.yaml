@@ -1,0 +1,9 @@
+version: 1
+
+allowedMergeBranches:
+  - main
+
+services:
+  - name: revenue-pro-backend
+    path: .
+    dockerfile: Dockerfile
