@@ -382,12 +382,16 @@ export class LeadService {
 
       // Match only the date part, ignoring time
       targetLead = leads.find((lead: any) => {
+        if (!lead.leadDate) return false;
         // Convert lead's date to YYYY-MM-DD format
-        const leadDateOnly = new Date(lead.leadDate).toISOString().split('T')[0];
+        const leadDateOnly = new Date(lead.leadDate)?.toISOString().split('T')[0];
+        if (!leadDateOnly) return false;
         // Handle provided date: could be either YYYY-MM-DD or full datetime
+        if (!leadDate) return false;
         let providedDateOnly;
         try {
-          providedDateOnly = new Date(leadDate).toISOString().split('T')[0];
+          providedDateOnly = new Date(leadDate)?.toISOString().split('T')[0];
+          if (!providedDateOnly) return false;
         } catch (error) {
           throw new Error("Invalid date format. Please provide date in YYYY-MM-DD format");
         }
