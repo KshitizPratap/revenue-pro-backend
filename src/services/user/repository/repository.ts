@@ -78,7 +78,7 @@ export class UserRepositoryService {
 
   async getAllUsers(role?: string): Promise<IUser[]> {
     try {
-  const query: any = { status: 'active' };
+  let query: any = {};
       if (role) query.role = role;
       return await User.find(query);
     } catch (error) {
