@@ -120,8 +120,6 @@ export class SheetsService {
     // Extract GID (sub-sheet ID) from URL if present
     let targetGid: string | null = extractGid(sheetUrl);
     
-    // console.log(`Processing sheet ${sheetId}${targetGid ? ` (gid ${targetGid})` : ''}`);
-    
     // Build export URL - if specific gid is provided, include it
     let url = `https://docs.google.com/spreadsheets/d/${sheetId}/export?format=xlsx`;
     if (targetGid) {
@@ -141,17 +139,14 @@ export class SheetsService {
       const workbook = XLSX.read(buffer, { type: "array", cellDates: true });
       availableSubSheets = workbook.SheetNames;
       
-      // console.log(`Found ${availableSubSheets.length} sub-sheets`);
       
       // Determine which sheet to process
       if (targetGid) {
         // Find sheet by GID - when exporting with specific GID, it usually becomes the first (and only) sheet
         targetSheetName = availableSubSheets[0];
-        // console.log(`Processing target sub-sheet by gid: ${targetSheetName}`);
       } else {
         // No specific GID - use first sheet
         targetSheetName = availableSubSheets[0];
-        // console.log(`Processing default sub-sheet: ${targetSheetName}`);
       }
       
       const sheet = workbook.Sheets[targetSheetName];
@@ -196,7 +191,6 @@ export class SheetsService {
         });
       }
 
-      // console.log(`Parsed ${data.length} rows from sheet`);
       
     } catch (error: any) {
       console.error("Error parsing sheet:", error);
@@ -205,7 +199,6 @@ export class SheetsService {
 
     // Check if data is empty
     if (!data || data.length === 0) {
-      // console.log("No data found in sheet");
       return {
         leads: [],
         stats: {
@@ -328,7 +321,6 @@ export class SheetsService {
 
     // Log detailed skip summary
     // main summary log
-    // console.log(`Processed ${validLeads.length} valid leads, skipped ${skipReasons.total}`);
 
     // Convert skipReasons to breakdown array
     const skipReasonsBreakdown: string[] = [
