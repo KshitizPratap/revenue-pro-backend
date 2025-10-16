@@ -94,7 +94,6 @@ export class TargetController {
           
           const { startDate, endDate, queryType, ...targetData } = target;
           if (!startDate || !queryType) {
-            // console.log(`Skipping target ${i + 1}: missing startDate or queryType`);
             continue;
           }
 
@@ -105,7 +104,6 @@ export class TargetController {
             }
           }
           
-          // console.log(`Filtered target data:`, filteredTargetData);
           
           try {
             // Handles weekly, monthly, and yearly upserts based on queryType
@@ -117,7 +115,6 @@ export class TargetController {
               filteredTargetData
             );   
             
-            // console.log(`Result type: ${Array.isArray(result) ? 'array' : 'single'}, length: ${Array.isArray(result) ? result.length : 1}`);
             
             // Handle case where result might be an array (for yearly queryType)
             if (Array.isArray(result)) {
@@ -244,11 +241,6 @@ export class TargetController {
           );
           break;
       }
-
-      // Log the response structure for debugging
-      // console.log(`=== Response Structure for ${queryTypeStr} ===`);
-      // console.log(`Results type: ${Array.isArray(results) ? 'array' : 'object'}`);
-      // console.log(`Results length: ${Array.isArray(results) ? results.length : 'N/A'}`);
 
       utils.sendSuccessResponse(res, 200, { success: true, data: results });
     } catch (error) {
