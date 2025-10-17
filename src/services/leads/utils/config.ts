@@ -21,8 +21,8 @@ export const LEAD_CONFIG = {
 
   // Disengagement thresholds for user activity tracking
   DISENGAGEMENT: {
-    WEEKLY_REPORT_DAYS: 40,  // Weekly report inactivity threshold (7 days)
-    LEAD_ACTIVITY_DAYS: 50  // Lead manual update inactivity threshold (14 days)
+    WEEKLY_REPORT_DAYS: 7,  // Weekly report inactivity threshold (7 days)
+    LEAD_ACTIVITY_DAYS: 14  // Lead manual update inactivity threshold (14 days)
   } as const, 
   
   // Month mapping for date processing
