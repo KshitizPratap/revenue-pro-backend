@@ -3,7 +3,7 @@ import { ILeadRepository, ILeadAggregationRepository } from "../repository/inter
 import { leadRepository } from "../repository/LeadRepository.js";
 import { leadAggregationRepository } from "../repository/LeadAggregationRepository.js";
 import { ActualRepository } from "../../actual/repository/repository.js";
-import { TimezoneUtils } from "../../../utils/timezoneUtils.js";
+import { DISENGAGEMENT } from '../utils/config.js';
 import mongoose from "mongoose";
 import User from "../../user/repository/models/user.model.js";
 
@@ -491,8 +491,8 @@ export class LeadService {
   async getClientActivityData(): Promise<CategorizedInactiveClients> {
     try {
       const now = new Date();
-      const wrDays = 7; // Fixed: Weekly report inactivity threshold (7 days)
-      const ldDays = 14; // Fixed: Lead inactivity threshold (14 days)
+      const wrDays = DISENGAGEMENT.WEEKLY_REPORT_DAYS; // 7 days from config
+      const ldDays = DISENGAGEMENT.LEAD_ACTIVITY_DAYS; // 14 days from config
       const wrThreshold = new Date(now.getTime() - (wrDays * 24 * 60 * 60 * 1000)); // Weekly report threshold
       const ldThreshold = new Date(now.getTime() - (ldDays * 24 * 60 * 60 * 1000)); // Lead threshold
 
