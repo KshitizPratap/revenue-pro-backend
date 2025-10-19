@@ -9,19 +9,11 @@ export class TicketController {
     this.ticketService = new TicketService();
   }
 
-  private getStringQueryParam(param: unknown): string | undefined {
-    if (typeof param === "string") return param;
-    if (Array.isArray(param)) {
-      const first = param[0];
-      return typeof first === "string" ? first : undefined;
-    }
-    return undefined;
-  }
-
   // POST /api/v1/tickets - Create a new ticket
   async createTicket(req: Request, res: Response): Promise<void> {
     try {
-      const { userId, title, description } = req.body;
+      const userId = req.context.getUserId();
+      const { title, description } = req.body;
 
       if (!title || !description) {
         utils.sendErrorResponse(res, "Title and description are required");
@@ -75,8 +67,19 @@ export class TicketController {
   // GET /api/v1/tickets - Get tickets with optional filters
   async getTickets(req: Request, res: Response): Promise<void> {
     try {
-      const rawUserId = req.query.userId;
-      const userId = this.getStringQueryParam(rawUserId);
+      const currentUserId = req.context.getUserId();
+      const currentUser = req.context.getUser();
+
+      let userId: string;
+
+      if (currentUser?.role === 'ADMIN') {
+          // Admin can see all tickets
+          userId = 'all';
+        } else {
+          // Regular users can only see their own tickets
+          userId = currentUserId;
+        }
+      
 
       const tickets = await this.ticketService.getTickets({
         userId
