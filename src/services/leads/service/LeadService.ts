@@ -29,7 +29,8 @@ interface FilterOptions {
   adName?: string;
   status?: string;
   unqualifiedLeadReason?: string;
-  name?: string
+  name?: string;
+  $or?: any[];
 }
 
 interface PaginatedLeadsResult {
@@ -289,7 +290,9 @@ export class LeadService {
       query.status = 'unqualified';
       query.unqualifiedLeadReason = filters.unqualifiedLeadReason;
     }
-    if (filters.name) query.name = filters.name;
+    if (filters.$or) {
+      query.$or = filters.$or;
+    }
 
     // Pagination setup
     const skip = (pagination.page - 1) * pagination.limit;
