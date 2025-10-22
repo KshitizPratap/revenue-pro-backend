@@ -227,10 +227,16 @@ if (req.query.clientId) {
         filters.status = req.query.status.trim();
       if (typeof req.query.unqualifiedLeadReason === "string")
         filters.unqualifiedLeadReason = req.query.unqualifiedLeadReason.trim();
+      // Search 'name' query parameter across multiple fields
       if (typeof req.query.name === "string" && req.query.name.trim() !== "") {
-        // Add regex for partial name search (case-insensitive)
-        filters.name = { $regex: req.query.name.trim(), $options: "i" };
-      }      
+        const searchTerm = req.query.name.trim();
+        filters.$or = [
+          { name: { $regex: searchTerm, $options: "i" } },
+          { service: { $regex: searchTerm, $options: "i" } },
+          { adSetName: { $regex: searchTerm, $options: "i" } },
+          { adName: { $regex: searchTerm, $options: "i" } }
+        ];
+      }   
       // Fetch paginated leads
       const result = await this.service.getLeadsPaginated(
         clientId,
