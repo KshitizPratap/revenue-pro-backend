@@ -829,5 +829,6 @@ export class TargetService {
     }
 
     return monthlyTargets;
+    console.log(monthlyTargets);
   }
 }
