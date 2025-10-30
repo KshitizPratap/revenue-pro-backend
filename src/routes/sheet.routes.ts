@@ -5,6 +5,7 @@ import { verifyApiKey } from "../middlewares/apiKey.middleware.js";
 const router = Router();
 const controller = new LeadController();
 
-router.post("/", verifyApiKey, controller.processSheetLeads);
+// Feature deprecated
+// router.post("/", verifyApiKey, controller.processSheetLeads);
 
 export default router;
