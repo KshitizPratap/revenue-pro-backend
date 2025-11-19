@@ -142,7 +142,6 @@ class MultiClientOpportunitySyncCron {
         // Count target tags and sum revenue from custom field for job_won contacts
         const TARGET_TAGS = [
           'facebook lead',
-          'new_lead',
           'appt_completed',
           'job_won',
           'job_lost',
@@ -175,7 +174,11 @@ class MultiClientOpportunitySyncCron {
           opportunitiesWithTags++;
 
           const lower = new Set(collected.map((t: string) => String(t).toLowerCase()));
-          const presentTargetTags = TARGET_TAGS.filter((tag) => lower.has(tag) && tag !== 'new_lead');
+          
+          // Mandatory check: skip if "facebook lead" tag is not present
+          if (!lower.has('facebook lead')) continue;
+          
+          const presentTargetTags = TARGET_TAGS.filter((tag) => lower.has(tag) && tag !== 'facebook lead');
           
           // Log tag details for debugging
           for (const tag of TARGET_TAGS) {
@@ -184,7 +187,7 @@ class MultiClientOpportunitySyncCron {
             }
             
             if (tag === 'facebook lead') {
-              if (presentTargetTags.length === 1 && presentTargetTags[0] === 'facebook lead') {
+              if (presentTargetTags.length === 0) {
                 counts[tag] += 1;
                 tagDetails[tag].count += 1;
                 tagDetails[tag].opportunityIds.push(opp.id);
@@ -232,7 +235,8 @@ class MultiClientOpportunitySyncCron {
             }
           }
           const lower = new Set(collected.map((t: string) => String(t).toLowerCase()));
-          if (lower.has(JOB_WON_TAG) && opp?.contactId) {
+          // Mandatory check: require both "facebook lead" and "job_won" tags
+          if (lower.has('facebook lead') && lower.has(JOB_WON_TAG) && opp?.contactId) {
             jobWonContactIds.push(opp.contactId);
           }
         }
@@ -289,7 +293,8 @@ class MultiClientOpportunitySyncCron {
           }
           if (collected.length === 0) continue;
           const lower = new Set(collected.map((t: string) => String(t).toLowerCase()));
-          if (lower.has('facebook lead') || lower.has('new_lead')) {
+          // Count if 'facebook lead' tag is present
+          if (lower.has('facebook lead')) {
             leadsCount += 1;
             leadsDetails.push({ opportunityId: opp.id, tags: collected });
           }
@@ -320,7 +325,8 @@ class MultiClientOpportunitySyncCron {
           }
           if (collected.length === 0) continue;
           const lower = new Set(collected.map((t: string) => String(t).toLowerCase()));
-          if (lower.has('appt_booked')) {
+          // Count if BOTH 'facebook lead' AND 'appt_booked' are present
+          if (lower.has('facebook lead') && lower.has('appt_booked')) {
             estimatesSetCount += 1;
           }
         }
@@ -347,9 +353,12 @@ class MultiClientOpportunitySyncCron {
           }
           if (collected.length === 0) continue;
           const lower = new Set(collected.map((t: string) => String(t).toLowerCase()));
-          const hasEstimatesRanTag = ESTIMATES_RAN_TAGS.some((tag) => lower.has(tag));
-          if (hasEstimatesRanTag) {
-            estimatesRanCount += 1;
+          // Count if 'facebook lead' tag is present AND ANY of the estimates ran tags are present
+          if (lower.has('facebook lead')) {
+            const hasEstimatesRanTag = ESTIMATES_RAN_TAGS.some((tag) => lower.has(tag));
+            if (hasEstimatesRanTag) {
+              estimatesRanCount += 1;
+            }
           }
         }
         const estimatesRan = estimatesRanCount;

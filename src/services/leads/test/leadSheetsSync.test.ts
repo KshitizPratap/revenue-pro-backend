@@ -8,6 +8,11 @@
  * 4. Checks in DB if those emails exist and shows their current status
  * 5. Shows what status they would be updated to based on tags
  * 
+ * Updated to match new formula requirements:
+ * - Requires "facebook lead" tag (skips opportunities without it)
+ * - Filters unknown tags (only processes tags in ALL_ALLOWED_TAGS)
+ * - ESTIMATE_SET_TAGS now includes 'appt_booked' and 'appt_cancelled'
+ * 
  * Usage:
  *   - Ensure you have at least 2 active GHL clients configured
  *   - Run: npx ts-node src/services/leads/test/leadSheetsSync.test.ts
@@ -51,7 +56,7 @@ const IN_PROGRESS_TAGS = [
   'day10am', 'day10pm', 'day11am', 'day11pm', 'day12am', 'day12pm',
   'day13am', 'day13pm', 'day14am', 'day14pm'
 ];
-const ESTIMATE_SET_TAGS = ['appt_completed', 'job_won', 'job_lost'];
+const ESTIMATE_SET_TAGS = ['appt_completed', 'appt_cancelled', 'job_won', 'job_lost', 'appt_booked'];
 const UNQUALIFIED_TAGS = [
   'dq - bad phone number',
   'dq - job too small',
@@ -81,12 +86,37 @@ function collectTags(opportunity: GhlOpportunity): string[] {
   return tags;
 }
 
-function determineLeadStatus(tags: string[]): { status: 'new' | 'in_progress' | 'estimate_set' | 'unqualified'; unqualifiedReason?: string } {
-  const lowerTags = tags.map(t => t.toLowerCase().trim());
+/**
+ * Determine lead status based on tags with priority:
+ * unqualified > estimate_set > in_progress > new_lead
+ * 
+ * Only processes tags that are in ALL_ALLOWED_TAGS (unknown tags are ignored)
+ * Requires "facebook lead" tag to be present (returns null if missing)
+ */
+function determineLeadStatus(tags: string[]): { status: 'new' | 'in_progress' | 'estimate_set' | 'unqualified'; unqualifiedReason?: string } | null {
+  // Define all allowed tags (unknown tags will be filtered out)
+  const ALL_ALLOWED_TAGS = [
+    ...NEW_LEAD_TAGS,
+    ...IN_PROGRESS_TAGS,
+    ...ESTIMATE_SET_TAGS,
+    ...UNQUALIFIED_TAGS,
+  ];
+  
+  // Normalize tags to lowercase and filter to only allowed tags
+  const lowerTags = tags.map(t => String(t).toLowerCase().trim());
+  const allowedTags = lowerTags.filter(tag => 
+    ALL_ALLOWED_TAGS.some(allowed => allowed.toLowerCase() === tag)
+  );
+  const tagSet = new Set(allowedTags);
+  
+  // Mandatory check: "facebook lead" tag must be present
+  if (!tagSet.has('facebook lead')) {
+    return null; // Skip this lead
+  }
   
   // Check for unqualified tags (highest priority)
   for (const unqualifiedTag of UNQUALIFIED_TAGS) {
-    if (lowerTags.includes(unqualifiedTag.toLowerCase())) {
+    if (tagSet.has(unqualifiedTag.toLowerCase())) {
       return {
         status: 'unqualified',
         unqualifiedReason: unqualifiedTag
@@ -96,22 +126,15 @@ function determineLeadStatus(tags: string[]): { status: 'new' | 'in_progress' | 
   
   // Check for estimate_set tags
   for (const estimateTag of ESTIMATE_SET_TAGS) {
-    if (lowerTags.includes(estimateTag.toLowerCase())) {
+    if (tagSet.has(estimateTag.toLowerCase())) {
       return { status: 'estimate_set' };
     }
   }
   
   // Check for in_progress tags
   for (const progressTag of IN_PROGRESS_TAGS) {
-    if (lowerTags.includes(progressTag.toLowerCase())) {
+    if (tagSet.has(progressTag.toLowerCase())) {
       return { status: 'in_progress' };
-    }
-  }
-  
-  // Check for new_lead tags
-  for (const newTag of NEW_LEAD_TAGS) {
-    if (lowerTags.includes(newTag.toLowerCase())) {
-      return { status: 'new' };
     }
   }
   
@@ -185,7 +208,7 @@ async function testLeadSheetsSync() {
         name: string;
         tags: string[];
         currentStatus?: string;
-        newStatus: string;
+        newStatus: string | 'SKIPPED (missing "facebook lead" tag)';
         unqualifiedReason?: string;
         existsInDB: boolean;
         leadData?: any;
@@ -231,7 +254,7 @@ async function testLeadSheetsSync() {
           name: string;
           tags: string[];
           currentStatus?: string;
-          newStatus: string;
+          newStatus: string | 'SKIPPED (missing "facebook lead" tag)';
           unqualifiedReason?: string;
           existsInDB: boolean;
           leadData?: any;
@@ -252,8 +275,41 @@ async function testLeadSheetsSync() {
           // Collect tags
           const tags = collectTags(opp);
           
-          // Determine new status
-          const { status, unqualifiedReason } = determineLeadStatus(tags);
+          // Determine new status (returns null if "facebook lead" tag is missing)
+          const statusResult = determineLeadStatus(tags);
+          
+          // Skip if "facebook lead" tag is not present
+          if (!statusResult) {
+            // Determine which tags were filtered out (unknown tags)
+            const ALL_ALLOWED_TAGS = [
+              ...NEW_LEAD_TAGS,
+              ...IN_PROGRESS_TAGS,
+              ...ESTIMATE_SET_TAGS,
+              ...UNQUALIFIED_TAGS,
+            ];
+            const lowerTags = tags.map(t => String(t).toLowerCase().trim());
+            const allowedTags = lowerTags.filter(tag => 
+              ALL_ALLOWED_TAGS.some(allowed => allowed.toLowerCase() === tag)
+            );
+            const filteredTags = tags.filter(tag => 
+              !ALL_ALLOWED_TAGS.some(allowed => allowed.toLowerCase() === String(tag).toLowerCase().trim())
+            );
+            
+            // Still log it but mark as skipped
+            emailResults.push({
+              email: email.trim(),
+              name: opp.contact?.name || opp.name || 'Unknown',
+              tags: allowedTags.length > 0 ? allowedTags : tags, // Show allowed tags if any, otherwise all tags
+              currentStatus: undefined,
+              newStatus: 'SKIPPED (missing "facebook lead" tag)',
+              unqualifiedReason: filteredTags.length > 0 ? `Filtered out unknown tags: ${filteredTags.join(', ')}` : undefined,
+              existsInDB: false,
+              leadData: undefined,
+            });
+            continue;
+          }
+          
+          const { status, unqualifiedReason } = statusResult;
 
           // Check in DB
           const existingLeads = await leadRepository.findLeads({
@@ -327,10 +383,12 @@ async function testLeadSheetsSync() {
       const byStatus = {
         existsInDB: result.emails.filter(e => e.existsInDB),
         notInDB: result.emails.filter(e => !e.existsInDB),
+        skipped: result.emails.filter(e => e.newStatus === 'SKIPPED (missing "facebook lead" tag)'),
       };
 
       console.log(`  Emails in DB: ${byStatus.existsInDB.length}`);
-      console.log(`  Emails NOT in DB: ${byStatus.notInDB.length}\n`);
+      console.log(`  Emails NOT in DB: ${byStatus.notInDB.length - byStatus.skipped.length}`);
+      console.log(`  Skipped (missing "facebook lead" tag): ${byStatus.skipped.length}\n`);
 
       // Show first 10 emails in detail
       const emailsToShow = result.emails.slice(0, 10);
@@ -343,7 +401,13 @@ async function testLeadSheetsSync() {
         console.log(`    Tags: ${emailData.tags.length > 0 ? emailData.tags.join(', ') : 'No tags'}`);
         console.log(`    In DB: ${emailData.existsInDB ? 'YES' : 'NO'}`);
         
-        if (emailData.existsInDB) {
+        if (emailData.newStatus === 'SKIPPED (missing "facebook lead" tag)') {
+          console.log(`    Status: SKIPPED - Missing mandatory "facebook lead" tag`);
+          console.log(`    Allowed Tags: ${emailData.tags.length > 0 ? emailData.tags.join(', ') : 'No allowed tags'}`);
+          if (emailData.unqualifiedReason && emailData.unqualifiedReason.startsWith('Filtered out')) {
+            console.log(`    ${emailData.unqualifiedReason}`);
+          }
+        } else if (emailData.existsInDB) {
           console.log(`    Current Status: ${emailData.currentStatus || 'N/A'}`);
           console.log(`    Would Update To: ${emailData.newStatus}`);
           if (emailData.unqualifiedReason) {
@@ -365,15 +429,20 @@ async function testLeadSheetsSync() {
       }
 
       // Summary statistics
-      const statusChanges = byStatus.existsInDB.filter(e => e.currentStatus !== e.newStatus);
+      const statusChanges = byStatus.existsInDB.filter(e => e.currentStatus !== e.newStatus && e.newStatus !== 'SKIPPED (missing "facebook lead" tag)');
+      const validEmails = result.emails.filter(e => e.newStatus !== 'SKIPPED (missing "facebook lead" tag)');
       console.log('  Summary:');
       console.log(`    Total emails: ${result.emails.length}`);
+      console.log(`    Valid emails (with "facebook lead" tag): ${validEmails.length}`);
+      console.log(`    Skipped (missing "facebook lead" tag): ${byStatus.skipped.length}`);
       console.log(`    In DB: ${byStatus.existsInDB.length}`);
       console.log(`    Would be updated: ${statusChanges.length}`);
-      console.log(`    Status changes:`);
-      statusChanges.forEach(e => {
-        console.log(`      ${e.email}: ${e.currentStatus} → ${e.newStatus}`);
-      });
+      if (statusChanges.length > 0) {
+        console.log(`    Status changes:`);
+        statusChanges.forEach(e => {
+          console.log(`      ${e.email}: ${e.currentStatus} → ${e.newStatus}`);
+        });
+      }
       console.log('');
     }
 

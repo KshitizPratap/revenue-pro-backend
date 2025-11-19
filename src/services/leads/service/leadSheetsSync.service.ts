@@ -56,7 +56,7 @@ const IN_PROGRESS_TAGS = [
   'day10am', 'day10pm', 'day11am', 'day11pm', 'day12am', 'day12pm',
   'day13am', 'day13pm', 'day14am', 'day14pm'
 ];
-const ESTIMATE_SET_TAGS = ['appt_completed', 'appt_cancelled', 'job_won', 'job_lost'];
+const ESTIMATE_SET_TAGS = ['appt_completed', 'appt_cancelled', 'job_won', 'job_lost', 'appt_booked'];
 const UNQUALIFIED_TAGS = [
   'dq - bad phone number',
   'dq - job too small',
@@ -114,13 +114,34 @@ function collectTags(opportunity: GhlOpportunity): string[] {
 /**
  * Determine lead status based on tags with priority:
  * unqualified > estimate_set > in_progress > new_lead
+ * 
+ * Only processes tags that are in ALL_ALLOWED_TAGS (unknown tags are ignored)
+ * Requires "facebook lead" tag to be present (returns null if missing)
  */
-function determineLeadStatus(tags: string[]): { status: 'new' | 'in_progress' | 'estimate_set' | 'unqualified'; unqualifiedReason?: string } {
-  const lowerTags = tags.map(t => t.toLowerCase().trim());
+function determineLeadStatus(tags: string[]): { status: 'new' | 'in_progress' | 'estimate_set' | 'unqualified'; unqualifiedReason?: string } | null {
+  // Define all allowed tags (unknown tags will be filtered out)
+  const ALL_ALLOWED_TAGS = [
+    ...NEW_LEAD_TAGS,
+    ...IN_PROGRESS_TAGS,
+    ...ESTIMATE_SET_TAGS,
+    ...UNQUALIFIED_TAGS,
+  ];
+  
+  // Normalize tags to lowercase and filter to only allowed tags
+  const lowerTags = tags.map(t => String(t).toLowerCase().trim());
+  const allowedTags = lowerTags.filter(tag => 
+    ALL_ALLOWED_TAGS.some(allowed => allowed.toLowerCase() === tag)
+  );
+  const tagSet = new Set(allowedTags);
+  
+  // Mandatory check: "facebook lead" tag must be present
+  if (!tagSet.has('facebook lead')) {
+    return null; // Skip this lead
+  }
   
   // Check for unqualified tags (highest priority)
   for (const unqualifiedTag of UNQUALIFIED_TAGS) {
-    if (lowerTags.includes(unqualifiedTag.toLowerCase())) {
+    if (tagSet.has(unqualifiedTag.toLowerCase())) {
       return {
         status: 'unqualified',
         unqualifiedReason: unqualifiedTag
@@ -130,22 +151,15 @@ function determineLeadStatus(tags: string[]): { status: 'new' | 'in_progress' | 
   
   // Check for estimate_set tags
   for (const estimateTag of ESTIMATE_SET_TAGS) {
-    if (lowerTags.includes(estimateTag.toLowerCase())) {
+    if (tagSet.has(estimateTag.toLowerCase())) {
       return { status: 'estimate_set' };
     }
   }
   
   // Check for in_progress tags
   for (const progressTag of IN_PROGRESS_TAGS) {
-    if (lowerTags.includes(progressTag.toLowerCase())) {
+    if (tagSet.has(progressTag.toLowerCase())) {
       return { status: 'in_progress' };
-    }
-  }
-  
-  // Check for new_lead tags
-  for (const newTag of NEW_LEAD_TAGS) {
-    if (lowerTags.includes(newTag.toLowerCase())) {
-      return { status: 'new' };
     }
   }
   
@@ -247,8 +261,21 @@ export class LeadSheetsSyncService {
           // Collect tags
           const tags = collectTags(opportunity);
           
-          // Determine status
-          const { status, unqualifiedReason } = determineLeadStatus(tags);
+          // Determine status (returns null if "facebook lead" tag is missing)
+          const statusResult = determineLeadStatus(tags);
+          
+          // Skip if "facebook lead" tag is not present
+          if (!statusResult) {
+            stats.skipped++;
+            logger.debug('[Lead Sheets Sync] Opportunity missing "facebook lead" tag, skipping', {
+              locationId,
+              revenueProClientId,
+              email: email.trim(),
+            });
+            continue;
+          }
+          
+          const { status, unqualifiedReason } = statusResult;
 
           // Find existing lead by email and clientId
           const existingLeads = await leadRepository.findLeads({
