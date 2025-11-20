@@ -23,4 +23,6 @@ export const config = {
   GOOGLE_SHEETS_ID: process.env.GOOGLE_SHEETS_ID || '',
   GOOGLE_SERVICE_ACCOUNT_EMAIL: process.env.GOOGLE_SERVICE_ACCOUNT_EMAIL || '',
   GOOGLE_PRIVATE_KEY: process.env.GOOGLE_PRIVATE_KEY || '',
+  LEAD_SHEETS_SYNC_CRON: process.env.LEAD_SHEETS_SYNC_CRON || "0 4 * * *", // daily 04:00 UTC
+ 
 };
