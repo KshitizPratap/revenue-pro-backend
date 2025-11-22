@@ -12,6 +12,7 @@ import logger, {
 } from "./utils/logger.js";
 import conversionRateUpdateService from "./services/cron/conversionRateUpdateService.js";
 import opportunitySyncCron from "./services/opportunities/cron/opportunitySync.cron.js";
+import multiClientOpportunitySyncCron from "./services/opportunities/cron/multiClientOpportunitySync.cron.js";
 import leadSheetsSyncCron from "./services/leads/cron/leadSheetsSync.cron.js";
 
 // Initialize express app
@@ -75,10 +76,15 @@ app.listen(PORT, () => {
   conversionRateUpdateService.startWeeklyCronJob();
   logger.info("Weekly conversion rate update cron job initialized");
 
-  // Start the daily opportunity sync cron job
-  opportunitySyncCron.start();
-  logger.info("Opportunity sync cron job initialized");
 
+  // opportunitySyncCron.start();
+ 
+
+  // Start multi-client opportunity sync cron job
+  multiClientOpportunitySyncCron.start();
+  logger.info("Multi-client opportunity sync cron job initialized");
+
+  // Start lead sheets sync cron job
   // Start the lead sheets sync cron job
   leadSheetsSyncCron.start();
   logger.info("Lead sheets sync cron job initialized");

@@ -1,11 +1,53 @@
 import http from '../../../pkg/http/client.js';
 import { config } from '../../../config.js';
-import logger from '../../../utils/logger.js';
-import { leadRepository } from '../repository/LeadRepository.js';
+import ghlClientService from '../../ghlClient/service/service.js';
 import { LeadService } from './LeadService.js';
-import { ILead, LeadStatus } from '../domain/leads.domain.js';
+import { leadRepository } from '../repository/LeadRepository.js';
+import logger from '../../../utils/logger.js';
+import { ILead } from '../domain/leads.domain.js';
 
-// Tag categories as defined in documentation
+type GhlOpportunity = {
+  id: string;
+  name: string;
+  monetaryValue: number;
+  status: string;
+  pipelineId: string;
+  pipelineStageId: string;
+  contactId?: string;
+  contact?: {
+    name?: string;
+    email?: string;
+    phone?: string;
+    companyName?: string;
+    tags?: string[];
+  };
+  relations?: Array<{
+    tags?: string[];
+  }>;
+  assignedTo?: string;
+  source?: string;
+  createdAt: string;
+  updatedAt: string;
+  lastStageChangeAt: string;
+  lastStatusChangeAt: string;
+};
+
+type GhlResponse = {
+  opportunities: GhlOpportunity[];
+  meta: {
+    total: number;
+    nextPageUrl?: string | null;
+    startAfterId?: string | null;
+    startAfter?: number | null;
+  };
+};
+
+type RetryOptions = {
+  retries: number;
+  baseDelayMs: number;
+};
+
+// Tag mappings
 const NEW_LEAD_TAGS = ['new_lead', 'facebook lead'];
 const IN_PROGRESS_TAGS = [
   'day1am', 'day1pm', 'day2am', 'day2pm', 'day3am', 'day3pm',
@@ -26,358 +68,370 @@ const UNQUALIFIED_TAGS = [
   'dq - services we dont offer'
 ];
 
-const ALL_ALLOWED_TAGS = [
-  ...NEW_LEAD_TAGS,
-  ...IN_PROGRESS_TAGS,
-  ...ESTIMATE_SET_TAGS,
-  ...UNQUALIFIED_TAGS
-];
-
-interface GhlOpportunity {
-  id: string;
-  contactId?: string;
-  contact?: {
-    email?: string;
-    name?: string;
-    tags?: string[];
-  };
-  relations?: Array<{
-    tags?: string[];
-  }>;
-  pipelineId?: string;
+async function withRetry<T>(fn: () => Promise<T>, { retries, baseDelayMs }: RetryOptions): Promise<T> {
+  let attempt = 0;
+  while (true) {
+    try {
+      return await fn();
+    } catch (err) {
+      attempt += 1;
+      if (attempt > retries) throw err;
+      const backoff = baseDelayMs * Math.pow(2, attempt - 1);
+      const jitter = Math.floor(Math.random() * (backoff / 2));
+      const sleep = backoff + jitter;
+      await new Promise((r) => setTimeout(r, sleep));
+    }
+  }
 }
 
-interface GhlResponse {
-  opportunities: GhlOpportunity[];
-  meta: {
-    total: number;
-    nextPageUrl?: string | null;
-  };
-}
-
-interface SyncStats {
-  processed: number;
-  updated: number;
-  skipped: number;
-  errors: number;
-}
-
-interface StatusDeterminationResult {
-  status: LeadStatus;
-  unqualifiedReason?: string;
+async function delay(ms: number): Promise<void> {
+  return new Promise((resolve) => setTimeout(resolve, ms));
 }
 
 /**
- * Lead Sheets Sync Service
- * 
- * This service synchronizes lead statuses from GoHighLevel (GHL) opportunities to the Revenue Pro backend database.
- * 
- * What it does:
- * 1. Fetches opportunities from GHL API for configured clients
- * 2. Extracts tags from opportunities (contact tags + relation tags)
- * 3. Determines lead status based on tag priority:
- *    - Mandatory: Must have "facebook lead" tag (skips if missing)
- *    - Priority 1: Any DQ tag → unqualified
- *    - Priority 2: Any estimate tag → estimate_set
- *    - Priority 3: Any day tag → in_progress
- *    - Default: Only has "facebook lead" or "new_lead" → new
- * 4. Updates existing leads in database (only status and unqualifiedLeadReason)
- * 5. Skips leads that:
- *    - Don't have email
- *    - Don't have "facebook lead" tag (mandatory)
- *    - Don't exist in database
- *    - Missing required fields (service, zip)
+ * Collect all tags from an opportunity
  */
-export class LeadSheetsSyncService {
-  private client: http;
-  private leadService: LeadService;
-
-  constructor() {
-    this.client = new http(config.GHL_BASE_URL, 15000);
-    this.leadService = new LeadService();
+function collectTags(opportunity: GhlOpportunity): string[] {
+  const tags: string[] = [];
+  
+  // Collect from contact tags
+  if (Array.isArray(opportunity.contact?.tags)) {
+    tags.push(...opportunity.contact.tags);
   }
-
-  /**
-   * Determine lead status from tags based on priority
-   * Only considers allowed tags - unknown tags are ignored
-   */
-  private determineStatusFromTags(tags: string[]): StatusDeterminationResult | null {
-    // Convert all tags to lowercase for comparison
-    const lowerTags = tags.map(t => String(t).toLowerCase());
-    
-    // Filter to only allowed tags (ignore unknown tags)
-    const allowedTags = lowerTags.filter(tag => 
-      ALL_ALLOWED_TAGS.some(allowed => allowed.toLowerCase() === tag)
-    );
-    const tagSet = new Set(allowedTags);
-
-    // Mandatory check: Must have "facebook lead" tag
-    if (!tagSet.has('facebook lead')) {
-      return null; // Skip this lead
+  
+  // Collect from relations tags
+  if (Array.isArray(opportunity.relations)) {
+    for (const rel of opportunity.relations) {
+      if (Array.isArray(rel?.tags)) {
+        tags.push(...rel.tags);
+      }
     }
+  }
+  
+  return tags;
+}
 
-    // Priority-based status determination (only using allowed tags)
-    // Priority 1: Unqualified tags (highest priority)
-    const unqualifiedTag = UNQUALIFIED_TAGS.find(tag => tagSet.has(tag.toLowerCase()));
-    if (unqualifiedTag) {
+/**
+ * Determine lead status based on tags with priority:
+ * unqualified > estimate_set > in_progress > new_lead
+ * 
+ * Only processes tags that are in ALL_ALLOWED_TAGS (unknown tags are ignored)
+ * Requires "facebook lead" tag to be present (returns null if missing)
+ * For 'new' status, requires BOTH 'new_lead' AND 'facebook lead' tags
+ */
+function determineLeadStatus(tags: string[]): { status: 'new' | 'in_progress' | 'estimate_set' | 'unqualified'; unqualifiedReason?: string } | null {
+  // Define all allowed tags (unknown tags will be filtered out)
+  const ALL_ALLOWED_TAGS = [
+    ...NEW_LEAD_TAGS,
+    ...IN_PROGRESS_TAGS,
+    ...ESTIMATE_SET_TAGS,
+    ...UNQUALIFIED_TAGS,
+  ];
+  
+  // Normalize tags to lowercase and filter to only allowed tags
+  const lowerTags = tags.map(t => String(t).toLowerCase().trim());
+  const allowedTags = lowerTags.filter(tag => 
+    ALL_ALLOWED_TAGS.some(allowed => allowed.toLowerCase() === tag)
+  );
+  const tagSet = new Set(allowedTags);
+  
+  // Mandatory check: "facebook lead" tag must be present
+  if (!tagSet.has('facebook lead')) {
+    return null; // Skip this lead
+  }
+  
+  // Check for unqualified tags (highest priority)
+  for (const unqualifiedTag of UNQUALIFIED_TAGS) {
+    if (tagSet.has(unqualifiedTag.toLowerCase())) {
       return {
         status: 'unqualified',
         unqualifiedReason: unqualifiedTag
       };
     }
-
-    // Priority 2: Estimate set tags
-    const estimateSetTag = ESTIMATE_SET_TAGS.find(tag => tagSet.has(tag.toLowerCase()));
-    if (estimateSetTag) {
-      return {
-        status: 'estimate_set'
-      };
+  }
+  
+  // Check for estimate_set tags
+  for (const estimateTag of ESTIMATE_SET_TAGS) {
+    if (tagSet.has(estimateTag.toLowerCase())) {
+      return { status: 'estimate_set' };
     }
-
-    // Priority 3: In progress tags
-    const inProgressTag = IN_PROGRESS_TAGS.find(tag => tagSet.has(tag.toLowerCase()));
-    if (inProgressTag) {
-      return {
-        status: 'in_progress'
-      };
+  }
+  
+  // Check for in_progress tags
+  for (const progressTag of IN_PROGRESS_TAGS) {
+    if (tagSet.has(progressTag.toLowerCase())) {
+      return { status: 'in_progress' };
     }
+  }
+  
+  // Check for new_lead status - requires BOTH 'new_lead' AND 'facebook lead' tags
+  if (tagSet.has('new_lead') && tagSet.has('facebook lead')) {
+    return { status: 'new' };
+  }
+  
+  // If we reach here, the opportunity has 'facebook lead' but doesn't match any status category
+  // This should not happen in normal flow, but return null to skip
+  return null;
+}
 
-    // Default: Only has "facebook lead" tag (unknown tags are ignored)
-    return {
-      status: 'new'
-    };
+export class LeadSheetsSyncService {
+  private httpClient: http;
+  private leadService: LeadService;
+
+  constructor() {
+    this.httpClient = new http(config.GHL_BASE_URL, 15000);
+    this.leadService = new LeadService();
   }
 
   /**
-   * Collect all tags from an opportunity (contact tags + relation tags)
+   * Fetch opportunities from GHL API for a specific location
    */
-  private collectTags(opportunity: GhlOpportunity): string[] {
-    const tags: string[] = [];
-    
-    // Collect contact tags
-    if (Array.isArray(opportunity.contact?.tags)) {
-      tags.push(...opportunity.contact.tags);
-    }
-
-    // Collect relation tags
-    if (Array.isArray(opportunity.relations)) {
-      for (const rel of opportunity.relations) {
-        if (Array.isArray(rel.tags)) {
-          tags.push(...rel.tags);
-        }
-      }
-    }
-
-    return tags;
-  }
-
-  /**
-   * Fetch opportunities from GHL API with pagination
-   */
-  private async fetchOpportunities(
-    locationId: string,
-    pipelineId: string,
-    apiToken: string
-  ): Promise<GhlOpportunity[]> {
-    const allOpportunities: GhlOpportunity[] = [];
+  private async fetchOpportunities(locationId: string, apiToken: string): Promise<GhlResponse> {
     let url: string | null = `/opportunities/search?location_id=${encodeURIComponent(locationId)}`;
+    const aggregated: GhlOpportunity[] = [];
+    let lastMeta: GhlResponse['meta'] = { total: 0 } as any;
 
     while (url) {
-      try {
-        const response = await this.client.get<GhlResponse>(url, {
-          headers: {
-            Authorization: `Bearer ${apiToken}`,
-            Version: '2021-07-28',
-          },
-        }) as GhlResponse;
+      const page: GhlResponse = await this.httpClient.get<GhlResponse>(url, {
+        headers: {
+          Authorization: `Bearer ${apiToken}`,
+          Version: '2021-07-28',
+        },
+      });
 
-        if (response?.opportunities?.length) {
-          // Filter by pipeline ID if provided
-          const filtered: GhlOpportunity[] = pipelineId
-            ? response.opportunities.filter((opp: GhlOpportunity) => opp.pipelineId === pipelineId)
-            : response.opportunities;
-          
-          allOpportunities.push(...filtered);
-        }
-
-        url = response?.meta?.nextPageUrl || null;
-      } catch (error: any) {
-        logger.error('[Lead Sheets Sync] Failed to fetch opportunities page', {
-          url,
-          error: error.message || String(error)
-        });
-        throw error;
+      if (page?.opportunities?.length) {
+        aggregated.push(...page.opportunities);
       }
+      lastMeta = page?.meta || lastMeta;
+      const nextUrl: string | null | undefined = page?.meta?.nextPageUrl;
+      url = nextUrl && nextUrl.length > 0 ? nextUrl : null;
     }
 
-    return allOpportunities;
+    return { opportunities: aggregated, meta: { ...lastMeta, total: aggregated.length } } as GhlResponse;
   }
 
   /**
-   * Retry logic with exponential backoff
+   * Process opportunities and sync lead statuses
    */
-  private async retryWithBackoff<T>(
-    fn: () => Promise<T>,
-    maxRetries: number = 3,
-    baseDelay: number = 1000
-  ): Promise<T> {
-    let lastError: any;
-    
-    for (let attempt = 1; attempt <= maxRetries; attempt++) {
-      try {
-        return await fn();
-      } catch (error: any) {
-        lastError = error;
-        
-        if (attempt < maxRetries) {
-          const delay = baseDelay * Math.pow(2, attempt - 1) + Math.random() * (baseDelay / 2);
-          await new Promise(resolve => setTimeout(resolve, delay));
-          logger.warn(`[Lead Sheets Sync] Retry attempt ${attempt}/${maxRetries}`, {
-            error: error.message || String(error)
-          });
-        }
-      }
-    }
-    
-    throw lastError;
-  }
-
-  /**
-   * Sync leads for a single GHL client
-   */
-  public async syncLeadSheetsForClient(
+  async syncLeadSheetsForClient(
     locationId: string,
     pipelineId: string,
     revenueProClientId: string,
     apiToken: string
-  ): Promise<SyncStats> {
-    const stats: SyncStats = {
+  ): Promise<{
+    processed: number;
+    updated: number;
+    skipped: number;
+    errors: number;
+  }> {
+    const stats = {
       processed: 0,
       updated: 0,
       skipped: 0,
-      errors: 0
+      errors: 0,
     };
 
     try {
-      logger.info('[Lead Sheets Sync] Starting sync for client', {
-        locationId,
-        pipelineId,
-        revenueProClientId
-      });
-
-      // Fetch opportunities from GHL
-      const opportunities = await this.retryWithBackoff(() =>
-        this.fetchOpportunities(locationId, pipelineId, apiToken)
-      );
+      // Fetch all opportunities
+      const ghlResponse = await this.fetchOpportunities(locationId, apiToken);
+      const opportunities = ghlResponse.opportunities || [];
 
       logger.info('[Lead Sheets Sync] Fetched opportunities', {
         locationId,
-        count: opportunities.length
+        revenueProClientId,
+        totalOpportunities: opportunities.length,
+      });
+
+      // Process all opportunities from all pipelines
+      logger.info('[Lead Sheets Sync] Processing all pipelines', {
+        locationId,
+        revenueProClientId,
+        totalOpportunities: opportunities.length,
       });
 
       // Process each opportunity
-      for (const opp of opportunities) {
+      for (const opportunity of opportunities) {
         try {
-          stats.processed++;
-
-          // Extract email from contact
-          const email = opp.contact?.email?.trim();
-          if (!email) {
+          const email = opportunity.contact?.email;
+          
+          // Skip if no email
+          if (!email || !email.trim()) {
             stats.skipped++;
             continue;
           }
 
           // Collect tags
-          const tags = this.collectTags(opp);
+          const tags = collectTags(opportunity);
           
-          // Determine status from tags
-          const statusResult = this.determineStatusFromTags(tags);
+          // Determine status (returns null if "facebook lead" tag is missing)
+          const statusResult = determineLeadStatus(tags);
           
-          // Skip if no status determined (missing mandatory tag)
+          // Skip if "facebook lead" tag is not present
           if (!statusResult) {
             stats.skipped++;
+            logger.debug('[Lead Sheets Sync] Opportunity missing "facebook lead" tag, skipping', {
+              locationId,
+              revenueProClientId,
+              email: email.trim(),
+            });
             continue;
           }
+          
+          const { status, unqualifiedReason } = statusResult;
 
-          // Find lead in database by email and clientId
+          // Find existing lead by email and clientId
           const existingLeads = await leadRepository.findLeads({
-            email,
-            clientId: revenueProClientId
+            email: email.trim(),
+            clientId: revenueProClientId,
           });
 
+          // Skip if lead doesn't exist in DB
           if (!existingLeads || existingLeads.length === 0) {
             stats.skipped++;
+            logger.debug('[Lead Sheets Sync] Lead not found in DB, skipping', {
+              locationId,
+              revenueProClientId,
+              email: email.trim(),
+            });
             continue;
           }
 
-          // Update all matching leads (in case of duplicates)
-          for (const lead of existingLeads) {
-            // Check if lead has required fields
-            if (!lead.service || !lead.zip) {
-              stats.skipped++;
-              continue;
-            }
+          // Get the first matching lead
+          const existingLead = existingLeads[0];
 
-            // Get lead ID (handle both document and plain object)
-            const leadId = (lead as any)._id?.toString() || (lead as any).id;
-            if (!leadId) {
-              stats.skipped++;
-              continue;
-            }
-
-            // Only update if status or unqualifiedReason changed
-            const needsUpdate =
-              lead.status !== statusResult.status ||
-              (lead.unqualifiedLeadReason || '') !== (statusResult.unqualifiedReason || '');
-
-            if (needsUpdate) {
-              try {
-                await leadRepository.updateLead(
-                  leadId,
-                  {
-                    status: statusResult.status,
-                    unqualifiedLeadReason: statusResult.unqualifiedReason || ''
-                  }
-                );
-                stats.updated++;
-              } catch (updateError: any) {
-                logger.error('[Lead Sheets Sync] Failed to update lead', {
-                  leadId,
-                  email,
-                  error: updateError.message || String(updateError)
-                });
-                stats.errors++;
-              }
-            } else {
-              stats.skipped++;
-            }
+          // Ensure required fields exist
+          if (!existingLead.service || !existingLead.zip) {
+            stats.skipped++;
+            logger.debug('[Lead Sheets Sync] Lead missing required fields, skipping', {
+              locationId,
+              revenueProClientId,
+              email: email.trim(),
+              hasService: !!existingLead.service,
+              hasZip: !!existingLead.zip,
+            });
+            continue;
           }
-        } catch (error: any) {
-          logger.error('[Lead Sheets Sync] Error processing opportunity', {
-            opportunityId: opp.id,
-            error: error.message || String(error)
+
+          // Prepare lead data - only update status and unqualified reason
+          const leadData: Partial<ILead> = {
+            status: status,
+            unqualifiedLeadReason: unqualifiedReason || '',
+          };
+
+          // Update lead using the existing lead's query fields
+          const query = {
+            email: email.trim(),
+            clientId: revenueProClientId,
+            service: existingLead.service,
+            zip: existingLead.zip,
+          };
+
+          await this.leadService.upsertLead(query, leadData);
+          
+          stats.updated++;
+          stats.processed++;
+
+          logger.debug('[Lead Sheets Sync] Processed lead', {
+            locationId,
+            revenueProClientId,
+            email: email.trim(),
+            status,
+            unqualifiedReason,
+            tags,
           });
+        } catch (error: any) {
           stats.errors++;
+          logger.error('[Lead Sheets Sync] Error processing opportunity', {
+            locationId,
+            revenueProClientId,
+            opportunityId: opportunity.id,
+            error: error?.message || String(error),
+          });
         }
       }
 
-      logger.info('[Lead Sheets Sync] Sync completed for client', {
+      logger.info('[Lead Sheets Sync] Completed sync', {
         locationId,
         revenueProClientId,
-        stats
+        stats,
       });
 
       return stats;
     } catch (error: any) {
-      logger.error('[Lead Sheets Sync] Failed to sync client', {
+      logger.error('[Lead Sheets Sync] Failed to sync', {
         locationId,
         revenueProClientId,
-        error: error.message || String(error)
+        error: error?.message || String(error),
       });
       throw error;
     }
   }
 
+  /**
+   * Sync lead sheets for all active GHL clients
+   */
+  async syncAllClients(): Promise<void> {
+    const clients = await ghlClientService.getAllActiveGhlClients();
+    
+    if (!clients || clients.length === 0) {
+      logger.warn('[Lead Sheets Sync] No active GHL clients found');
+      return;
+    }
+
+    logger.info('[Lead Sheets Sync] Starting sync for all clients', {
+      clientCount: clients.length,
+    });
+
+    const retry: RetryOptions = { retries: 3, baseDelayMs: 1000 };
+    const perClientDelayMs = 1000; // 1s between clients
+
+    for (const client of clients) {
+      const locationId = client.locationId;
+      const decryptedToken = ghlClientService.getDecryptedApiToken(client);
+      const pipelineId = client.pipelineId;
+      const revenueProClientId = client.revenueProClientId;
+
+      if (!locationId || !decryptedToken || !pipelineId || !revenueProClientId) {
+        logger.warn('[Lead Sheets Sync] Skipping client due to missing required fields', {
+          locationId,
+          hasToken: !!decryptedToken,
+          hasPipelineId: !!pipelineId,
+          revenueProClientId,
+        });
+        await delay(perClientDelayMs);
+        continue;
+      }
+
+      try {
+        const stats = await withRetry(
+          () => this.syncLeadSheetsForClient(
+            locationId,
+            pipelineId,
+            revenueProClientId,
+            decryptedToken
+          ),
+          retry
+        );
+
+        logger.info('[Lead Sheets Sync] Client sync completed', {
+          locationId,
+          revenueProClientId,
+          stats,
+        });
+      } catch (error: any) {
+        logger.error('[Lead Sheets Sync] Client sync failed', {
+          locationId,
+          revenueProClientId,
+          error: error?.message || String(error),
+        });
+      }
+
+      // Delay between clients
+      await delay(perClientDelayMs);
+    }
+
+    logger.info('[Lead Sheets Sync] Completed sync for all clients');
+  }
 }
 
 export default new LeadSheetsSyncService();

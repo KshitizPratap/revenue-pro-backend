@@ -4,6 +4,7 @@ import { UserRole } from "../middlewares/auth.middleware.js";
 import { IUser } from "../services/user/domain/user.domain.js";
 import utils from "../utils/utils.js";
 import opportunitySyncCron from "../services/opportunities/cron/opportunitySync.cron.js";
+import multiClientOpportunitySyncCron from "../services/opportunities/cron/multiClientOpportunitySync.cron.js";
 import leadSheetsSyncCron from "../services/leads/cron/leadSheetsSync.cron.js";
 
 class AdminController {
@@ -222,6 +223,35 @@ class AdminController {
     }
   };
 
+  public triggerMultiClientOpportunitySync = async (req: Request, res: Response): Promise<void> => {
+    try {
+      const userId = req.context.getUserId();
+
+      // Check if cron is already running
+      if (multiClientOpportunitySyncCron.isRunningCheck()) {
+        utils.sendErrorResponse(res, {
+          message: "Multi-client opportunity sync cron is already running",
+          statusCode: 409
+        });
+        return;
+      }
+
+      // Trigger the cron job and wait for completion
+      await multiClientOpportunitySyncCron.runOnce();
+
+      utils.sendSuccessResponse(res, 200, {
+        success: true,
+        message: "Multi-client opportunity sync cron job completed successfully",
+        data: {
+          userId,
+          status: "completed"
+        }
+      });
+    } catch (error) {
+      utils.sendErrorResponse(res, error);
+    }
+  };
+
   public triggerLeadSheetsSync = async (req: Request, res: Response): Promise<void> => {
     try {
       const userId = req.context.getUserId();
@@ -250,6 +280,7 @@ class AdminController {
       utils.sendErrorResponse(res, error);
     }
   };
+
 }
 
 export default new AdminController();
