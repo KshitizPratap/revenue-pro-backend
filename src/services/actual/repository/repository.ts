@@ -98,4 +98,64 @@ export class ActualRepository {
   async findActualsByQuery(query: any): Promise<IWeeklyActualDocument[]> {
     return await this.model.find(query).sort({ startDate: 1 });
   }
+
+  /**
+   * Get users with their total revenue for a date range
+   * @param startDate - Start date in ISO format
+   * @param endDate - End date in ISO format
+   * @returns Array of objects with userId, userName, userEmail, and totalRevenue
+   */
+  async getUsersRevenueByDateRange(
+    startDate: string,
+    endDate: string
+  ): Promise<Array<{ userId: string; userName: string; userEmail: string; totalRevenue: number }>> {
+    const result = await this.model.aggregate([
+      {
+        $match: {
+          startDate: {
+            $gte: startDate,
+            $lte: endDate,
+          },
+        },
+      },
+      {
+        $group: {
+          _id: "$userId",
+          totalRevenue: { $sum: "$revenue" },
+        },
+      },
+      {
+        $addFields: {
+          userObjectId: { $toObjectId: "$_id" },
+        },
+      },
+      {
+        $lookup: {
+          from: "users",
+          localField: "userObjectId",
+          foreignField: "_id",
+          as: "userDetails",
+        },
+      },
+      {
+        $unwind: {
+          path: "$userDetails",
+          preserveNullAndEmptyArrays: true,
+        },
+      },
+      {
+        $project: {
+          _id: 0,
+          userId: "$_id",
+          userName: { $ifNull: ["$userDetails.name", "Unknown User"] },
+          userEmail: { $ifNull: ["$userDetails.email", ""] },
+          totalRevenue: 1,
+        },
+      },
+      {
+        $sort: { totalRevenue: -1 },
+      },
+    ]);
+    return result;
+  }
 }
