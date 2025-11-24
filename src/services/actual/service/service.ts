@@ -364,4 +364,18 @@ export class ActualService {
 
     return results;
   }
+
+  /**
+   * Get users with their total revenue for a date range, including user details
+   * @param startDate - Start date in ISO format (YYYY-MM-DD)
+   * @param endDate - End date in ISO format (YYYY-MM-DD)
+   * @returns Array of objects with user details and total revenue
+   */
+  public async getUsersRevenueByDateRange(
+    startDate: string,
+    endDate: string
+  ): Promise<Array<{ userId: string; userName: string; userEmail: string; totalRevenue: number }>> {
+    const revenueData = await this.actualRepository.getUsersRevenueByDateRange(startDate, endDate);
+    return revenueData;
+  }
 }

@@ -89,11 +89,18 @@ export class AggregateController {
         String(queryType) as "weekly" | "monthly" | "yearly"
       );
 
+      // Get users revenue breakdown
+      const usersRevenue = await this.actualService.getUsersRevenueByDateRange(
+        String(startDateStr),
+        String(endDateStr)
+      );
+
       res.status(200).json({
         success: true,
         data: {
           actual: actualResults,
-          target: Array.isArray(targetResults) ? targetResults : [targetResults]
+          target: Array.isArray(targetResults) ? targetResults : [targetResults],
+          usersRevenue: usersRevenue
         }
       });
     } catch (error: any) {
