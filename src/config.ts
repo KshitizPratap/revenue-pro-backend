@@ -24,5 +24,13 @@ export const config = {
   GOOGLE_SERVICE_ACCOUNT_EMAIL: process.env.GOOGLE_SERVICE_ACCOUNT_EMAIL || '',
   GOOGLE_PRIVATE_KEY: process.env.GOOGLE_PRIVATE_KEY || '',
   LEAD_SHEETS_SYNC_CRON: process.env.LEAD_SHEETS_SYNC_CRON || "0 4 * * *", // daily 04:00 UTC
+  
+  // Meta OAuth Configuration
+  META_CLIENT_ID: process.env.META_CLIENT_ID || '',
+  META_CLIENT_SECRET: process.env.META_CLIENT_SECRET || '',
+  // This is the redirect URI where Facebook sends the authorization code back to our backend
+  // Must match exactly what's configured in Facebook App settings
+  META_REDIRECT_URI: process.env.META_REDIRECT_URI || '',
+  META_API_VERSION: process.env.META_API_VERSION || '',
  
 };
