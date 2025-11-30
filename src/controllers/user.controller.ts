@@ -30,6 +30,7 @@ class UserController {
           isEmailVerified: user.isEmailVerified,
           hasLoggedIn: user.hasLoggedIn,
           hasSeenLatestUpdate: user.hasSeenLatestUpdate,
+          fbAdAccountId: user.fbAdAccountId,
         },
       });
     } catch (error) {
@@ -125,6 +126,46 @@ class UserController {
         data: {
           id: updatedUser._id,
           hasSeenLatestUpdate: updatedUser.hasSeenLatestUpdate,
+        },
+      });
+    } catch (error) {
+      utils.sendErrorResponse(res, error);
+    }
+  };
+
+  public updateFbAdAccountId = async (
+    req: Request,
+    res: Response
+  ): Promise<void> => {
+    try {
+      const userId = req.context.getUserId();
+      const { fbAdAccountId } = req.body;
+
+      if (!fbAdAccountId) {
+        utils.sendErrorResponse(res, "fbAdAccountId is required");
+        return;
+      }
+
+      // Validate format (should be numeric or act_XXXXX)
+      const isValid = /^(act_)?\d+$/.test(fbAdAccountId);
+      if (!isValid) {
+        utils.sendErrorResponse(res, "Invalid ad account ID format. Should be numeric or act_XXXXX");
+        return;
+      }
+
+      const updatedUser = await this.userService.updateFbAdAccountId(userId, fbAdAccountId);
+
+      if (!updatedUser) {
+        utils.sendErrorResponse(res, "User not found");
+        return;
+      }
+
+      utils.sendSuccessResponse(res, 200, {
+        success: true,
+        message: "Facebook ad account ID updated successfully",
+        data: {
+          id: updatedUser._id,
+          fbAdAccountId: updatedUser.fbAdAccountId,
         },
       });
     } catch (error) {

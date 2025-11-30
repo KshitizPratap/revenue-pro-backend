@@ -36,14 +36,14 @@ interface EnrichedAd {
   };
 }
 
-export async function getEnrichedAds({ since, until }: { since: string; until: string }): Promise<EnrichedAd[]> {
-  console.log(`\n[Enriched Ads] 🚀 Starting enrichment process for ${since} to ${until}`);
+export async function getEnrichedAds({ adAccountId, since, until }: { adAccountId: string; since: string; until: string }): Promise<EnrichedAd[]> {
+  console.log(`\n[Enriched Ads] Starting enrichment process for ${adAccountId} from ${since} to ${until}`);
   
   // 1) Insights
   console.log('[Enriched Ads] Step 1: Fetching insights...');
-  const insightsRows = await getAdInsights({ since, until });
+  const insightsRows = await getAdInsights({ adAccountId, since, until });
   if (!insightsRows.length) {
-    console.log('[Enriched Ads] ⚠️  No insights found');
+    console.log('[Enriched Ads] No insights found');
     return [];
   }
 
@@ -110,6 +110,6 @@ export async function getEnrichedAds({ since, until }: { since: string; until: s
     };
   });
 
-  console.log(`[Enriched Ads] ✅ Enrichment complete! ${final.length} records enriched\n`);
+  console.log(`[Enriched Ads] Enrichment complete! ${final.length} records enriched\n`);
   return final;
 }

@@ -27,6 +27,5 @@ export const config = {
   
   // Facebook Ads Configuration
   FB_ACCESS_TOKEN: process.env.FB_ACCESS_TOKEN,
-  FB_AD_ACCOUNT_ID: process.env.FB_AD_ACCOUNT_ID,
   FB_API_VERSION: process.env.FB_API_VERSION || 'v21.0',
 };

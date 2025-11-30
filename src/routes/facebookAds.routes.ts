@@ -12,4 +12,10 @@ const facebookAdsController = new FacebookAdsController();
  */
 router.get('/enriched-ads', (req, res) => facebookAdsController.getEnrichedAds(req, res));
 
+/**
+ * GET /api/v1/facebook/ad-accounts
+ * Get all ad accounts (owned + client) from Business Manager
+ */
+router.get('/ad-accounts', (req, res) => facebookAdsController.getAdAccounts(req, res));
+
 export default router;

@@ -70,7 +70,7 @@ export async function getAdsWithCreatives(adIds: string[]): Promise<Record<strin
 
   // Root path `/` for multi-id
   const res = await fbGet('/', params);
-  console.log(`[Ads] ✅ Retrieved ${Object.keys(res).length} ads`);
+  console.log(`[Ads] Retrieved ${Object.keys(res).length} ads`);
   return res;
 }
 

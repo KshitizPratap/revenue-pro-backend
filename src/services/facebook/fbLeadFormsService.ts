@@ -36,6 +36,6 @@ export async function getLeadForms(formIds: string[]): Promise<Record<string, Le
     };
   }
 
-  console.log(`[Lead Forms] ✅ Retrieved ${Object.keys(map).length} lead forms`);
+  console.log(`[Lead Forms] Retrieved ${Object.keys(map).length} lead forms`);
   return map;
 }

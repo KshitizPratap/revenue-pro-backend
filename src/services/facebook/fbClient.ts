@@ -32,11 +32,11 @@ export async function fbGet(path: string, params: Record<string, any> = {}): Pro
 
   if (!res.ok) {
     const text = await res.text();
-    console.error('[FB API] ❌ Error:', res.status, text);
+    console.error('[FB API] Error:', res.status, text);
     throw new Error(`Facebook API error: ${res.status} ${text}`);
   }
 
   const data = await res.json();
-  console.log(`[FB API] ✅ Success - Response size:`, JSON.stringify(data).length, 'bytes');
+  console.log(`[FB API] Success - Response size:`, JSON.stringify(data).length, 'bytes');
   return data;
 }
