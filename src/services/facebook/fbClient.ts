@@ -1,20 +1,24 @@
 // fbClient.ts
-const FB_API_VERSION = process.env.FB_API_VERSION || 'v21.0';
+import { config } from '../../config.js';
+
+const FB_API_VERSION = config.FB_API_VERSION || 'v21.0';
 const FB_BASE_URL = `https://graph.facebook.com/${FB_API_VERSION}`;
-const FB_ACCESS_TOKEN_ENV = process.env.FB_ACCESS_TOKEN;
-
-if (!FB_ACCESS_TOKEN_ENV) {
-  throw new Error('FB_ACCESS_TOKEN is not set in environment variables');
-}
-
-const FB_ACCESS_TOKEN: string = FB_ACCESS_TOKEN_ENV;
 
 /**
  * Generic GET helper for Facebook Graph API
  * @param path - e.g. '/act_123456789/insights' or '/'
  * @param params - query params as key->value
+ * @param accessToken - Meta access token to use for this request
  */
-export async function fbGet(path: string, params: Record<string, any> = {}): Promise<any> {
+export async function fbGet(
+  path: string,
+  params: Record<string, any> = {},
+  accessToken?: string
+): Promise<any> {
+  if (!accessToken) {
+    throw new Error('Meta access token is required for Facebook API calls');
+  }
+
   const url = new URL(FB_BASE_URL + path);
 
   Object.entries(params).forEach(([key, value]) => {
@@ -23,7 +27,7 @@ export async function fbGet(path: string, params: Record<string, any> = {}): Pro
     }
   });
 
-  url.searchParams.set('access_token', FB_ACCESS_TOKEN);
+  url.searchParams.set('access_token', accessToken);
 
   console.log(`[FB API] Making request to: ${path}`);
   console.log(`[FB API] Params:`, JSON.stringify(params, null, 2));

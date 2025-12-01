@@ -11,7 +11,15 @@ class UserController {
 
   public getProfile = async (req: Request, res: Response): Promise<void> => {
     try {
-      const userId = req.context.getUserId();
+      // Use the ID from route params (req.params.id) if provided
+      // Otherwise fall back to authenticated user's ID for backward compatibility
+      const userId = req.params.id || req.context.getUserId();
+      
+      if (!userId) {
+        utils.sendErrorResponse(res, "User ID is required");
+        return;
+      }
+      
       const user = await this.userService.getUserById(userId);
 
       if (!user) {
@@ -31,6 +39,7 @@ class UserController {
           hasLoggedIn: user.hasLoggedIn,
           hasSeenLatestUpdate: user.hasSeenLatestUpdate,
           fbAdAccountId: user.fbAdAccountId,
+          metaAccessToken: user.metaAccessToken,
         },
       });
     } catch (error) {
@@ -138,11 +147,16 @@ class UserController {
     res: Response
   ): Promise<void> => {
     try {
-      const userId = req.context.getUserId();
+      const clientId = req.params.clientId;
       const { fbAdAccountId } = req.body;
 
+      if (!clientId) {
+        utils.sendErrorResponse(res, "clientId is required in route params");
+        return;
+      }
+
       if (!fbAdAccountId) {
-        utils.sendErrorResponse(res, "fbAdAccountId is required");
+        utils.sendErrorResponse(res, "fbAdAccountId is required in request body");
         return;
       }
 
@@ -153,7 +167,7 @@ class UserController {
         return;
       }
 
-      const updatedUser = await this.userService.updateFbAdAccountId(userId, fbAdAccountId);
+      const updatedUser = await this.userService.updateFbAdAccountId(clientId, fbAdAccountId);
 
       if (!updatedUser) {
         utils.sendErrorResponse(res, "User not found");

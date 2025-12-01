@@ -49,10 +49,17 @@ interface NormalizedAd {
 /**
  * Batch fetch Ads with nested creative
  * @param adIds - Array of ad IDs
+ * @param accessToken - Meta access token for this request
  * @returns Object keyed by adId
  */
-export async function getAdsWithCreatives(adIds: string[]): Promise<Record<string, AdWithCreative>> {
+export async function getAdsWithCreatives(
+  adIds: string[],
+  accessToken: string
+): Promise<Record<string, AdWithCreative>> {
   if (!adIds || adIds.length === 0) return {};
+  if (!accessToken) {
+    throw new Error('Meta access token is required');
+  }
 
   console.log(`[Ads] Fetching ${adIds.length} ads with creatives`);
   console.log(`[Ads] Ad IDs:`, adIds.join(', '));
@@ -69,7 +76,7 @@ export async function getAdsWithCreatives(adIds: string[]): Promise<Record<strin
   };
 
   // Root path `/` for multi-id
-  const res = await fbGet('/', params);
+  const res = await fbGet('/', params, accessToken);
   console.log(`[Ads] Retrieved ${Object.keys(res).length} ads`);
   return res;
 }

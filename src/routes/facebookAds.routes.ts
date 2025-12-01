@@ -18,4 +18,10 @@ router.get('/enriched-ads', (req, res) => facebookAdsController.getEnrichedAds(r
  */
 router.get('/ad-accounts', (req, res) => facebookAdsController.getAdAccounts(req, res));
 
+/**
+ * GET /api/v1/facebook/my-businesses
+ * Get all businesses for the logged-in user (via /me/businesses)
+ */
+router.get('/my-businesses', (req, res) => facebookAdsController.getMyBusinesses(req, res));
+
 export default router;

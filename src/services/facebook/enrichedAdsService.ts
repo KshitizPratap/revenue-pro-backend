@@ -50,24 +50,30 @@ export async function getEnrichedAds({
   adAccountId, 
   startDate, 
   endDate, 
-  queryType 
+  queryType,
+  accessToken
 }: { 
   adAccountId: string; 
   startDate: string; 
   endDate: string; 
   queryType: 'weekly' | 'monthly' | 'yearly';
+  accessToken: string;
 }): Promise<EnrichedAd[] | WeeklyMetaSpend[]> {
   console.log(`\n[Enriched Ads] Starting enrichment process for ${adAccountId} from ${startDate} to ${endDate} (${queryType})`);
   
+  if (!accessToken) {
+    throw new Error('Meta access token is required');
+  }
+  
   // For monthly/yearly queries, split into weeks like actuals
   if (queryType === 'monthly' || queryType === 'yearly') {
-    return await getWeeklyMetaSpend(adAccountId, startDate, endDate, queryType);
+    return await getWeeklyMetaSpend(adAccountId, startDate, endDate, queryType, accessToken);
   }
 
   // For weekly queries, return detailed enriched ads (original behavior)
   // 1) Insights
   console.log('[Enriched Ads] Step 1: Fetching insights...');
-  const insightsRows = await getAdInsights({ adAccountId, since: startDate, until: endDate });
+  const insightsRows = await getAdInsights({ adAccountId, since: startDate, until: endDate, accessToken });
   if (!insightsRows.length) {
     console.log('[Enriched Ads] No insights found');
     return [];
@@ -80,7 +86,7 @@ export async function getEnrichedAds({
 
   // 2) Ads + creatives
   console.log('[Enriched Ads] Step 2: Fetching ads with creatives...');
-  const adsMapRaw = await getAdsWithCreatives(uniqueAdIds);
+  const adsMapRaw = await getAdsWithCreatives(uniqueAdIds, accessToken);
 
   const adEnrichedMap: Record<string, any> = {};
   const formIdsSet = new Set<string>();
@@ -99,7 +105,7 @@ export async function getEnrichedAds({
 
   // 3) Leadgen forms
   console.log(`[Enriched Ads] Step 3: Fetching ${formIdsSet.size} lead forms...`);
-  const formMap = await getLeadForms(Array.from(formIdsSet));
+  const formMap = await getLeadForms(Array.from(formIdsSet), accessToken);
 
   // 4) Join into final structure per insight row
   console.log('[Enriched Ads] Step 4: Joining data...');
@@ -148,9 +154,14 @@ async function getWeeklyMetaSpend(
   adAccountId: string,
   startDate: string,
   endDate: string,
-  queryType: 'monthly' | 'yearly'
+  queryType: 'monthly' | 'yearly',
+  accessToken: string
 ): Promise<WeeklyMetaSpend[]> {
   console.log(`[Weekly Meta Spend] Calculating weeks for ${queryType} query: ${startDate} to ${endDate}`);
+  
+  if (!accessToken) {
+    throw new Error('Meta access token is required');
+  }
   
   // Get week boundaries using same logic as actuals
   const weeks = DateUtils.getMonthWeeks(startDate, endDate);
@@ -165,7 +176,8 @@ async function getWeeklyMetaSpend(
         const insightsRows = await getAdInsights({ 
           adAccountId, 
           since: weekStart, 
-          until: weekEnd 
+          until: weekEnd,
+          accessToken
         });
 
         // Aggregate spend, impressions, clicks for the week

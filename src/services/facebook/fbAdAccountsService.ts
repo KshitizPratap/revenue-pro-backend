@@ -20,13 +20,20 @@ interface AdAccountsResponse {
 /**
  * Get all ad accounts (owned + client) from Business Manager
  * @param businessId - Facebook Business Manager ID
+ * @param accessToken - Meta access token for this request
  * @returns Combined list of owned and client ad accounts
  */
-export async function getAllAdAccounts(businessId: string): Promise<AdAccountsResponse> {
+export async function getAllAdAccounts(
+  businessId: string,
+  accessToken: string
+): Promise<AdAccountsResponse> {
   console.log(`[Ad Accounts] Fetching ad accounts for Business ID: ${businessId}`);
-
+    console.log('accessToken', accessToken);
   if (!businessId) {
     throw new Error('businessId is required');
+  }
+  if (!accessToken) {
+    throw new Error('Meta access token is required');
   }
 
   const fields = [
@@ -45,7 +52,7 @@ export async function getAllAdAccounts(businessId: string): Promise<AdAccountsRe
     fields,
     limit: 100,
   };
-  const ownedRes = await fbGet(`/${businessId}/owned_ad_accounts`, ownedParams);
+  const ownedRes = await fbGet(`/${businessId}/owned_ad_accounts`, ownedParams, accessToken);
   const ownedAccounts: AdAccount[] = ownedRes.data || [];
   console.log(`[Ad Accounts] Retrieved ${ownedAccounts.length} owned ad accounts`);
 
@@ -55,7 +62,7 @@ export async function getAllAdAccounts(businessId: string): Promise<AdAccountsRe
     fields,
     limit: 100,
   };
-  const clientRes = await fbGet(`/${businessId}/client_ad_accounts`, clientParams);
+  const clientRes = await fbGet(`/${businessId}/client_ad_accounts`, clientParams, accessToken);
   const clientAccounts: AdAccount[] = clientRes.data || [];
   console.log(`[Ad Accounts] Retrieved ${clientAccounts.length} client ad accounts`);
 
@@ -72,13 +79,20 @@ export async function getAllAdAccounts(businessId: string): Promise<AdAccountsRe
 /**
  * Get only owned ad accounts from Business Manager
  * @param businessId - Facebook Business Manager ID
+ * @param accessToken - Meta access token for this request
  * @returns List of owned ad accounts
  */
-export async function getOwnedAdAccounts(businessId: string): Promise<AdAccount[]> {
+export async function getOwnedAdAccounts(
+  businessId: string,
+  accessToken: string
+): Promise<AdAccount[]> {
   console.log(`[Ad Accounts] Fetching owned ad accounts for Business ID: ${businessId}`);
 
   if (!businessId) {
     throw new Error('businessId is required');
+  }
+  if (!accessToken) {
+    throw new Error('Meta access token is required');
   }
 
   const fields = [
@@ -96,7 +110,7 @@ export async function getOwnedAdAccounts(businessId: string): Promise<AdAccount[
     limit: 100,
   };
 
-  const res = await fbGet(`/${businessId}/owned_ad_accounts`, params);
+  const res = await fbGet(`/${businessId}/owned_ad_accounts`, params, accessToken);
   const accounts: AdAccount[] = res.data || [];
   console.log(`[Ad Accounts] Retrieved ${accounts.length} owned ad accounts`);
   
@@ -106,13 +120,20 @@ export async function getOwnedAdAccounts(businessId: string): Promise<AdAccount[
 /**
  * Get only client ad accounts from Business Manager
  * @param businessId - Facebook Business Manager ID
+ * @param accessToken - Meta access token for this request
  * @returns List of client ad accounts
  */
-export async function getClientAdAccounts(businessId: string): Promise<AdAccount[]> {
+export async function getClientAdAccounts(
+  businessId: string,
+  accessToken: string
+): Promise<AdAccount[]> {
   console.log(`[Ad Accounts] Fetching client ad accounts for Business ID: ${businessId}`);
 
   if (!businessId) {
     throw new Error('businessId is required');
+  }
+  if (!accessToken) {
+    throw new Error('Meta access token is required');
   }
 
   const fields = [
@@ -130,7 +151,7 @@ export async function getClientAdAccounts(businessId: string): Promise<AdAccount
     limit: 100,
   };
 
-  const res = await fbGet(`/${businessId}/client_ad_accounts`, params);
+  const res = await fbGet(`/${businessId}/client_ad_accounts`, params, accessToken);
   const accounts: AdAccount[] = res.data || [];
   console.log(`[Ad Accounts] Retrieved ${accounts.length} client ad accounts`);
   

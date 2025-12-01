@@ -15,11 +15,24 @@ interface AdInsight {
   date_stop: string;
 }
 
-export async function getAdInsights({ adAccountId, since, until }: { adAccountId: string; since: string; until: string }): Promise<AdInsight[]> {
+export async function getAdInsights({
+  adAccountId,
+  since,
+  until,
+  accessToken,
+}: {
+  adAccountId: string;
+  since: string;
+  until: string;
+  accessToken: string;
+}): Promise<AdInsight[]> {
   console.log(`[Insights] Fetching ad insights for ${adAccountId} from ${since} to ${until}`);
   
   if (!adAccountId) {
     throw new Error('adAccountId is required');
+  }
+  if (!accessToken) {
+    throw new Error('Meta access token is required');
   }
 
   const params = {
@@ -42,7 +55,7 @@ export async function getAdInsights({ adAccountId, since, until }: { adAccountId
     limit: 500,
   };
 
-  const res = await fbGet(`/${adAccountId}/insights`, params);
+  const res = await fbGet(`/${adAccountId}/insights`, params, accessToken);
   const insights: AdInsight[] = res.data || [];
   console.log(`[Insights] Retrieved ${insights.length} insight rows`);
   return insights;

@@ -9,6 +9,6 @@ router.put("/update", userController.updateProfile);
 router.put("/update-password", userController.updatePassword);
 router.put('/last-access', userController.updateLastAccess);
 router.put('/mark-update-seen', userController.markUpdateAsSeen);
-router.put('/fb-ad-account', userController.updateFbAdAccountId);
+router.put('/fb-ad-account/:clientId', userController.updateFbAdAccountId);
 
 export default router;

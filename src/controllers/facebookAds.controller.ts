@@ -2,11 +2,13 @@
 import { Request, Response } from 'express';
 import { getEnrichedAds } from '../services/facebook/enrichedAdsService.js';
 import { getAllAdAccounts } from '../services/facebook/fbAdAccountsService.js';
+import { fbGet } from '../services/facebook/fbClient.js';
 
 export class FacebookAdsController {
   constructor() {
     this.getEnrichedAds = this.getEnrichedAds.bind(this);
     this.getAdAccounts = this.getAdAccounts.bind(this);
+    this.getMyBusinesses = this.getMyBusinesses.bind(this);
   }
 
   /**
@@ -23,6 +25,18 @@ export class FacebookAdsController {
     console.log(`========================================\n`);
     
     try {
+      const user = req.context.getUser();
+      const accessToken = user?.metaAccessToken;
+
+      if (!accessToken) {
+        console.log('[API] Forbidden: Meta access token not connected for user');
+        res.status(403).json({
+          success: false,
+          error: 'Meta account not connected. Please connect your Meta account in profile settings.',
+        });
+        return;
+      }
+
       const adAccountId = req.query.adAccountId as string;
       const startDate = req.query.startDate as string;
       const endDate = req.query.endDate as string;
@@ -76,7 +90,8 @@ export class FacebookAdsController {
         adAccountId: formattedAdAccountId, 
         startDate, 
         endDate,
-        queryType: queryType as 'weekly' | 'monthly' | 'yearly'
+        queryType: queryType as 'weekly' | 'monthly' | 'yearly',
+        accessToken
       });
 
       console.log(`\n[API] Returning ${Array.isArray(data) ? data.length : 1} enriched records\n`);
@@ -107,6 +122,18 @@ export class FacebookAdsController {
     console.log(`========================================\n`);
     
     try {
+      const user = req.context.getUser();
+      const accessToken = user?.metaAccessToken;
+
+      if (!accessToken) {
+        console.log('[API] Forbidden: Meta access token not connected for user');
+        res.status(403).json({
+          success: false,
+          error: 'Meta account not connected. Please connect your Meta account in profile settings.',
+        });
+        return;
+      }
+
       const businessId = req.query.businessId as string;
 
       if (!businessId) {
@@ -128,7 +155,7 @@ export class FacebookAdsController {
         return;
       }
 
-      const data = await getAllAdAccounts(businessId);
+      const data = await getAllAdAccounts(businessId, accessToken);
 
       console.log(`\n[API] Returning ${data.total} ad accounts\n`);
       res.status(200).json({ 
@@ -146,6 +173,52 @@ export class FacebookAdsController {
         success: false, 
         error: 'Internal server error',
         message: err.message 
+      });
+    }
+  }
+
+  /**
+   * Get businesses for the current user from Meta
+   * GET /api/v1/facebook/my-businesses
+   */
+  async getMyBusinesses(req: Request, res: Response): Promise<void> {
+    console.log(`\n========================================`);
+    console.log(`[API] Request received: GET /api/v1/facebook/my-businesses`);
+    console.log(`========================================\n`);
+    
+    try {
+      const user = req.context.getUser();
+      const accessToken = user?.metaAccessToken;
+
+      if (!accessToken) {
+        console.log('[API] Forbidden: Meta access token not connected for user');
+        res.status(403).json({
+          success: false,
+          error: 'Meta account not connected. Please connect your Meta account in profile settings.',
+        });
+        return;
+      }
+
+      // Call Meta Graph API: /me/businesses
+      const params = {
+        limit: 100,
+      };
+
+      const result = await fbGet('/me/businesses', params, accessToken);
+
+      console.log(`[API] /me/businesses response keys:`, Object.keys(result || {}));
+
+      res.status(200).json({
+        success: true,
+        data: result?.data || [],
+      });
+    } catch (err: any) {
+      console.error('\n[API] Error in /api/v1/facebook/my-businesses:', err.message);
+      console.error('[API] Stack:', err.stack);
+      res.status(500).json({
+        success: false,
+        error: 'Internal server error',
+        message: err.message,
       });
     }
   }
