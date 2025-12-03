@@ -225,7 +225,7 @@ export class ActualController {
 
       // Validate required fields
       if (!userId || !startDate) {
-        res.status(400).json({ success: false, message: "userId and startDate are required" });
+        res.status(400).json({ success: false, message: "userId and startDate are required here" });
         return;
       }
 
