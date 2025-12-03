@@ -28,7 +28,12 @@ export class MetaOAuthService {
           },
         }
       );
-
+        console.log("params--------------------------------------", {
+            client_id: config.META_CLIENT_ID,
+            client_secret: config.META_CLIENT_SECRET,
+            redirect_uri: config.META_REDIRECT_URI,
+            code: code,
+          })
       if (!response.data.access_token) {
         throw new CustomError(ErrorCode.INTERNAL_SERVER_ERROR, {
           message: 'Failed to get access token from Meta',
@@ -55,6 +60,12 @@ export class MetaOAuthService {
    */
   async getLongLivedToken(shortLivedToken: string): Promise<TokenData> {
     try {
+      console.log("params--------------------------------------", {
+        grant_type: 'fb_exchange_token',
+        client_id: config.META_CLIENT_ID,
+        client_secret: config.META_CLIENT_SECRET,
+        fb_exchange_token: shortLivedToken,
+      })
       const response = await axios.get(
         `https://graph.facebook.com/${config.META_API_VERSION}/oauth/access_token`,
         {
