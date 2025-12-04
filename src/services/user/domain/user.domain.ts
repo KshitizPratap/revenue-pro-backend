@@ -10,11 +10,17 @@ export interface IUser extends Document {
   hasLoggedIn: boolean;
   name: string;
   leadSheetUrl?: string;
+  fbAdAccountId?: string;
   status?: 'active' | 'deleted' | "inactive";
   deletedAt?: Date;
   created_at: Date;
   updated_at: Date;
   lastAccessAt: Date;
   hasSeenLatestUpdate?: boolean;
+  // Meta OAuth fields
+  metaAccessToken?: string;
+  metaTokenExpiresAt?: Date;
+  metaTokenType?: string;
+  metaConnectedAt?: Date;
   comparePassword(candidatePassword: string): Promise<boolean>;
 }

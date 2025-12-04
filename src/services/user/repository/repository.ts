@@ -112,6 +112,11 @@ export class UserRepositoryService {
     hasLoggedIn?: boolean;
     status?: 'active' | 'inactive' | 'deleted';
     hasSeenLatestUpdate?: boolean;
+    fbAdAccountId?: string;
+    metaAccessToken?: string;
+    metaTokenExpiresAt?: Date;
+    metaTokenType?: string;
+    metaConnectedAt?: Date;
   }): Promise<IUser | null> {
     try {
       if (!userId) {

@@ -24,5 +24,18 @@ export const config = {
   GOOGLE_SERVICE_ACCOUNT_EMAIL: process.env.GOOGLE_SERVICE_ACCOUNT_EMAIL || '',
   GOOGLE_PRIVATE_KEY: process.env.GOOGLE_PRIVATE_KEY || '',
   LEAD_SHEETS_SYNC_CRON: process.env.LEAD_SHEETS_SYNC_CRON || "0 4 * * *", // daily 04:00 UTC
+  
+  // Facebook Ads Configuration
+  FB_ACCESS_TOKEN: process.env.FB_ACCESS_TOKEN,
+  FB_API_VERSION: process.env.FB_API_VERSION || 'v24.0',
+  META_USER_TOKEN_ID: '68ac6ebce46631727500499b',
+  // Meta OAuth Configuration
+  META_CLIENT_ID: process.env.META_CLIENT_ID || '',
+  META_CLIENT_SECRET: process.env.META_CLIENT_SECRET || '',
+  // This is the redirect URI where Facebook sends the authorization code back to our backend
+  // Must match exactly what's configured in Facebook App settings
+  // META_REDIRECT_URI: process.env.META_REDIRECT_URI || '',
+    META_REDIRECT_URI: "https://dev-revenue-pro-backend-1057029383450.asia-southeast1.run.app/api/v1/generate-meta-access-token/",
+  META_API_VERSION: process.env.META_API_VERSION || '',
  
 };
