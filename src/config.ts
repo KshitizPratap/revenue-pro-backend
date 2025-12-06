@@ -36,5 +36,4 @@ export const config = {
   // Must match exactly what's configured in Facebook App settings
   META_REDIRECT_URI: process.env.META_REDIRECT_URI || '',
   META_API_VERSION: process.env.META_API_VERSION || '',
- 
 };
