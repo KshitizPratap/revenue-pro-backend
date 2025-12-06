@@ -22,6 +22,7 @@ import {
   addContext,
 } from "../middlewares/common.middleware.js";
 import { verifyTokenMiddleware } from "../middlewares/auth.middleware.js";
+import { config } from "../config.js";
 
 interface Route {
   path: string;
@@ -59,7 +60,7 @@ const otherRoutes: Route[] = [
 const configureRoutes = (app: Express): void => {
   // add health route
   app.use("/health", [], (req: Request, res: Response) => {
-    res.status(200).json({ message: "I am healthy alright!!!" });
+    res.status(200).json({ message: "I am healthy alright!!!", config: config });
   });
 
   // Add this before your routes
