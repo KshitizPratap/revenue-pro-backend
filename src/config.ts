@@ -12,7 +12,7 @@ export const config = {
   ACCESS_TOKEN_SECRET: process.env.ACCESS_TOKEN_SECRET,
   REFRESH_TOKEN_SECRET: process.env.REFRESH_TOKEN_SECRET,
   SESSION_SECRET: process.env.SESSION_SECRET,
-  FRONTEND_URL: process.env.FRONTEND_URL,
+  FRONTEND_URL: process.env.FRONTEND_URL || '',
   NAME: process.env.NAME,
   GHL_BASE_URL: "https://services.leadconnectorhq.com",
   GHL_API_TOKEN: process.env.GHL_API_TOKEN, // GHL Private Integration Token

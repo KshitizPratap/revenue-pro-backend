@@ -1,0 +1,94 @@
+import LeadModel from './models/leads.model.js';
+import ConversionRateModel from './models/conversionRate.model.js';
+// ----------------- Lead Repository -----------------
+export const leadRepository = {
+    async createLead(data) {
+        return await LeadModel.create(data);
+    },
+    async getLeads(filter = {}) {
+        return await LeadModel.find(filter).exec();
+    },
+    async getLeadById(id) {
+        return await LeadModel.findById(id).exec();
+    },
+    async updateLead(id, update) {
+        return await LeadModel.findByIdAndUpdate(id, update, { new: true }).exec();
+    },
+    async deleteLead(id) {
+        return await LeadModel.findByIdAndDelete(id).exec();
+    },
+    async getLeadsByDateRange(start, end) {
+        return await LeadModel.find({ leadDate: { $gte: start, $lte: end } }).exec();
+    },
+    async insertMany(leads) {
+        return await LeadModel.insertMany(leads);
+    }
+};
+// ----------------- ConversionRate Repository -----------------
+export const conversionRateRepository = {
+    async createConversionRate(data) {
+        return await ConversionRateModel.create(data);
+    },
+    async getConversionRates(filter = {}) {
+        return await ConversionRateModel.find(filter).exec();
+    },
+    async getConversionRateById(id) {
+        return await ConversionRateModel.findById(id).exec();
+    },
+    async updateConversionRate(id, update) {
+        return await ConversionRateModel.findByIdAndUpdate(id, update, { new: true }).exec();
+    },
+    async deleteConversionRate(id) {
+        return await ConversionRateModel.findByIdAndDelete(id).exec();
+    },
+    async insertMany(conversionRates) {
+        return await ConversionRateModel.insertMany(conversionRates);
+    },
+    async upsertConversionRate(data) {
+        return await ConversionRateModel.findOneAndUpdate({ clientId: data.clientId, keyField: data.keyField, keyName: data.keyName }, data, { new: true, upsert: true }).exec();
+    },
+    /**
+     * Batch upsert multiple conversion rates - much more efficient than individual upserts
+     * Now returns detailed statistics about new vs updated records
+     */
+    async batchUpsertConversionRates(conversionRates) {
+        if (conversionRates.length === 0) {
+            return {
+                documents: [],
+                stats: { total: 0, newInserts: 0, updated: 0 }
+            };
+        }
+        // Use MongoDB bulkWrite for efficient batch operations
+        const bulkOps = conversionRates.map((rate) => ({
+            updateOne: {
+                filter: {
+                    clientId: rate.clientId,
+                    keyField: rate.keyField,
+                    keyName: rate.keyName
+                },
+                update: { $set: rate },
+                upsert: true
+            }
+        }));
+        const result = await ConversionRateModel.bulkWrite(bulkOps);
+        // Extract statistics from bulkWrite result
+        const newInserts = result.upsertedCount || 0;
+        const updated = result.modifiedCount || 0;
+        const total = newInserts + updated;
+        // Return the updated documents - fetch them after bulk operation
+        const filters = conversionRates.map(rate => ({
+            clientId: rate.clientId,
+            keyField: rate.keyField,
+            keyName: rate.keyName
+        }));
+        const documents = await ConversionRateModel.find({ $or: filters }).exec();
+        return {
+            documents,
+            stats: {
+                total,
+                newInserts,
+                updated
+            }
+        };
+    }
+};
