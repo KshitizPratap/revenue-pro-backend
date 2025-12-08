@@ -1,0 +1,695 @@
+// adPerformanceBoard.service.ts
+import { LeadService } from '../leads/service/LeadService.js';
+import { leadRepository } from '../leads/repository/LeadRepository.js';
+import { fbWeeklyAnalyticsRepository } from './repository/FbWeeklyAnalyticsRepository.js';
+
+// Import EnrichedAd type from enrichedAdsService
+interface EnrichedAd {
+  campaign_id: string;
+  campaign_name: string;
+  adset_id: string;
+  adset_name: string;
+  ad_id: string;
+  ad_name: string;
+  creative: {
+    id: string | null;
+    name: string | null;
+    primary_text: string | null;
+    headline: string | null;
+    raw: any;
+  } | null;
+  lead_form: {
+    id: string;
+    name: string;
+  } | null;
+  insights: {
+    impressions: number;
+    clicks: number;
+    spend: number;
+    date_start: string;
+    date_stop: string;
+  };
+}
+
+interface BoardFilters {
+  campaignName?: string | string[];
+  adSetName?: string | string[];
+  adName?: string | string[];
+  startDate: string; // YYYY-MM-DD
+  endDate: string;   // YYYY-MM-DD
+  estimateSetLeads?: boolean;
+  jobBookedLeads?: boolean;
+  zipCode?: string | string[];
+  serviceType?: string | string[];
+  leadScore?: {
+    min?: number;
+    max?: number;
+  };
+}
+
+interface BoardColumns {
+  campaignName?: boolean;
+  adSetName?: boolean;
+  adName?: boolean;
+  spend?: boolean;
+  impressions?: boolean;
+  clicks?: boolean;
+  unique_clicks?: boolean;
+  reach?: boolean;
+  frequency?: boolean;
+  ctr?: boolean;
+  unique_ctr?: boolean;
+  cpc?: boolean;
+  cpm?: boolean;
+  cpr?: boolean;
+  post_engagements?: boolean;
+  post_reactions?: boolean;
+  post_comments?: boolean;
+  post_shares?: boolean;
+  post_saves?: boolean;
+  page_engagements?: boolean;
+  link_clicks?: boolean;
+  video_views?: boolean;
+  video_views_25pct?: boolean;
+  video_views_50pct?: boolean;
+  video_views_75pct?: boolean;
+  video_views_100pct?: boolean;
+  video_avg_watch_time?: boolean;
+  video_play_actions?: boolean;
+  total_conversions?: boolean;
+  conversion_value?: boolean;
+  cost_per_conversion?: boolean;
+  total_leads?: boolean;
+  cost_per_lead?: boolean;
+  numberOfLeads?: boolean;
+  numberOfEstimateSets?: boolean;
+  numberOfJobsBooked?: boolean;
+  numberOfUnqualifiedLeads?: boolean;
+  costPerLead?: boolean;
+  costPerEstimateSet?: boolean;
+  costPerJobBooked?: boolean;
+  costOfMarketingPercent?: boolean;
+}
+
+interface BoardRow {
+  campaignName?: string;
+  adSetName?: string;
+  adName?: string;
+  spend?: number;
+  impressions?: number;
+  clicks?: number;
+  unique_clicks?: number;
+  reach?: number;
+  frequency?: number;
+  ctr?: number;
+  unique_ctr?: number;
+  cpc?: number;
+  cpm?: number;
+  cpr?: number;
+  post_engagements?: number;
+  post_reactions?: number;
+  post_comments?: number;
+  post_shares?: number;
+  post_saves?: number;
+  page_engagements?: number;
+  link_clicks?: number;
+  video_views?: number;
+  video_views_25pct?: number;
+  video_views_50pct?: number;
+  video_views_75pct?: number;
+  video_views_100pct?: number;
+  video_avg_watch_time?: number;
+  video_play_actions?: number;
+  total_conversions?: number;
+  conversion_value?: number;
+  cost_per_conversion?: number;
+  total_leads?: number;
+  cost_per_lead?: number;
+  numberOfLeads?: number;
+  numberOfEstimateSets?: number;
+  numberOfJobsBooked?: number;
+  numberOfUnqualifiedLeads?: number;
+  costPerLead?: number | null;
+  costPerEstimateSet?: number | null;
+  costPerJobBooked?: number | null;
+  costOfMarketingPercent?: number | null;
+  
+  _groupKey?: string;
+  _totalSpend?: number;
+  _totalRevenue?: number;
+  _totalImpressions?: number;
+  _totalClicks?: number;
+  _totalUniqueClicks?: number;
+  _totalReach?: number;
+  _totalFrequency?: number;
+  _totalCtr?: number;
+  _totalUniqueClickThroughRate?: number;
+  _totalCostPerClick?: number;
+  _totalCostPerThousandImpressions?: number;
+  _totalCostPerThousandReach?: number;
+  _totalPostEngagements?: number;
+  _totalPostReactions?: number;
+  _totalPostComments?: number;
+  _totalPostShares?: number;
+  _totalPostSaves?: number;
+  _totalPageEngagements?: number;
+  _totalLinkClicks?: number;
+  _totalVideoViews?: number;
+  _totalVideoViews25?: number;
+  _totalVideoViews50?: number;
+  _totalVideoViews75?: number;
+  _totalVideoViews100?: number;
+  _totalVideoAvgWatchTime?: number;
+  _totalVideoPlayActions?: number;
+  _totalConversions?: number;
+  _totalConversionValue?: number;
+  _totalCostPerConversion?: number;
+  _totalLeads?: number;
+  _totalCostPerLead?: number;
+  _count?: number;  // Track number of records for averaging
+}
+
+interface BoardParams {
+  clientId: string;
+  filters: BoardFilters;
+  columns: BoardColumns;
+  groupBy: 'campaign' | 'adset' | 'ad';
+}
+
+export async function getAdPerformanceBoard(
+  params: BoardParams
+): Promise<BoardRow[]> {
+  const { clientId, filters, columns, groupBy } = params;
+  console.log('[AdPerformanceBoard] Starting with params:', {
+    clientId,
+    groupBy,
+    dateRange: `${filters.startDate} to ${filters.endDate}`,
+  });
+  const startTime = Date.now();
+
+  // Fetch saved weekly analytics from database
+  const savedAnalytics = await fbWeeklyAnalyticsRepository.getAnalyticsByDateRange(
+    clientId,
+    filters.startDate,
+    filters.endDate
+  );
+
+  if (savedAnalytics.length === 0) {
+    console.log('[AdPerformanceBoard] No saved analytics found in database');
+    return [];
+  }
+  console.log('[AdPerformanceBoard] Saved analytics count:', savedAnalytics.length);
+  console.log('[AdPerformanceBoard] Sample saved analytics (first 3):', savedAnalytics.slice(0, 3).map(a => ({
+    campaignId: a.campaignId,
+    adId: a.adId,
+    weekStartDate: a.weekStartDate,
+    metrics: a.metrics ? { spend: a.metrics.spend, impressions: a.metrics.impressions } : null
+  })));
+
+  // Map DB fields (camelCase) to EnrichedAd interface (snake_case)
+  const enrichedAds: EnrichedAd[] = savedAnalytics.map((analytics) => ({
+    campaign_id: analytics.campaignId,
+    campaign_name: analytics.campaignName,
+    adset_id: analytics.adSetId,
+    adset_name: analytics.adSetName,
+    ad_id: analytics.adId,
+    ad_name: analytics.adName,
+    creative: analytics.creative ? {
+      id: analytics.creative.id || null,
+      name: analytics.creative.name || null,
+      primary_text: analytics.creative.primaryText || null,
+      headline: analytics.creative.headline || null,
+      raw: analytics.creative.raw || null,
+    } : null,
+    lead_form: analytics.leadForm ? {
+      id: analytics.leadForm.id,
+      name: analytics.leadForm.name,
+    } : null,
+    insights: {
+      impressions: analytics.metrics?.impressions || 0,
+      clicks: analytics.metrics?.clicks || 0,
+      spend: analytics.metrics?.spend || 0,
+      date_start: analytics.weekStartDate,
+      date_stop: analytics.weekEndDate,
+    },
+    // Store full metrics for aggregation
+    _fullMetrics: analytics.metrics,
+  } as any));
+
+  console.log(`[AdPerformanceBoard] Fetched ${enrichedAds.length} ads from database`);
+  console.log('[AdPerformanceBoard] Sample enrichedAds (first 5):', enrichedAds.slice(0,5).map(a=>({
+    campaign_name: a.campaign_name,
+    ad_name: a.ad_name,
+    spend: a.insights?.spend
+  })));
+
+  // Step 2: Fetch leads from database
+  const leadService = new LeadService();
+  const allLeads = await leadRepository.getLeadsByDateRangeAndClientId(
+    clientId,
+    filters.startDate,
+    filters.endDate
+  );
+
+  console.log(`[AdPerformanceBoard] Fetched ${allLeads.length} leads from database`);
+
+  console.log('[AdPerformanceBoard] Sample leads (first 5):', allLeads.slice(0,5).map(l=>({
+    id: (l as any)._id || (l as any).id,
+    adName: (l as any).adName,
+    status: (l as any).status,
+    jobBookedAmount: (l as any).jobBookedAmount
+  })));
+
+  // Step 3: Apply lead filters
+  let filteredLeads = allLeads.filter((lead) => !lead.isDeleted);
+
+  if (filters.estimateSetLeads === true) {
+    filteredLeads = filteredLeads.filter((lead) => lead.status === 'estimate_set');
+  }
+
+  if (filters.jobBookedLeads === true) {
+    filteredLeads = filteredLeads.filter((lead) => (lead.jobBookedAmount ?? 0) > 0);
+  }
+
+  if (filters.zipCode) {
+    const zipCodes = Array.isArray(filters.zipCode) ? filters.zipCode : [filters.zipCode];
+    filteredLeads = filteredLeads.filter((lead) => zipCodes.includes(lead.zip));
+  }
+
+  if (filters.serviceType) {
+    const serviceTypes = Array.isArray(filters.serviceType)
+      ? filters.serviceType
+      : [filters.serviceType];
+    filteredLeads = filteredLeads.filter((lead) =>
+      serviceTypes.includes(lead.service)
+    );
+  }
+
+  if (filters.leadScore) {
+    filteredLeads = filteredLeads.filter((lead) => {
+      if (!lead.leadScore) return false;
+      if (filters.leadScore!.min && lead.leadScore < filters.leadScore!.min)
+        return false;
+      if (filters.leadScore!.max && lead.leadScore > filters.leadScore!.max)
+        return false;
+      return true;
+    });
+  }
+
+  console.log(`[AdPerformanceBoard] After lead filters: ${filteredLeads.length} leads`);
+  console.log('[AdPerformanceBoard] Sample filteredLeads (first 5):', filteredLeads.slice(0,5).map(l=>({
+    id: (l as any)._id || (l as any).id,
+    adName: (l as any).adName,
+    status: (l as any).status
+  })));
+
+  // Step 4: Apply ad-level filters
+  let filteredAds = enrichedAds;
+
+  if (filters.campaignName) {
+    const campaigns = Array.isArray(filters.campaignName)
+      ? filters.campaignName
+      : [filters.campaignName];
+    filteredAds = filteredAds.filter((ad) =>
+      campaigns.includes(ad.campaign_name)
+    );
+  }
+
+  if (filters.adSetName) {
+    const adSets = Array.isArray(filters.adSetName)
+      ? filters.adSetName
+      : [filters.adSetName];
+    filteredAds = filteredAds.filter((ad) => adSets.includes(ad.adset_name));
+  }
+
+  if (filters.adName) {
+    const adNames = Array.isArray(filters.adName)
+      ? filters.adName
+      : [filters.adName];
+    filteredAds = filteredAds.filter((ad) => adNames.includes(ad.ad_name));
+  }
+
+  console.log(`[AdPerformanceBoard] After ad filters: ${filteredAds.length} ads`);
+  console.log('[AdPerformanceBoard] Sample filteredAds (first 5):', filteredAds.slice(0,5).map(a=>({
+    campaign_name: a.campaign_name,
+    adset_name: a.adset_name,
+    ad_name: a.ad_name,
+    spend: a.insights?.spend
+  })));
+
+  // Step 5: BUILD THE MAPS (ad name → campaign/adset)
+  const adNameToCampaignMap = new Map<string, string>();
+  const adNameToAdSetMap = new Map<string, string>();
+
+  filteredAds.forEach((ad) => {
+    adNameToCampaignMap.set(ad.ad_name, ad.campaign_name);
+    adNameToAdSetMap.set(ad.ad_name, ad.adset_name);
+  });
+
+  console.log(`[AdPerformanceBoard] Built lookup maps with ${adNameToCampaignMap.size} entries`);
+  console.log('[AdPerformanceBoard] Example mapping (first 5):', Array.from(adNameToCampaignMap.entries()).slice(0,5));
+
+  // Step 6: Build aggregation map
+  const aggregationMap = new Map<string, BoardRow>();
+
+  // First, process ads to get spend data
+  filteredAds.forEach((ad) => {
+    let groupKey: string;
+    let rowData: Partial<BoardRow> = {};
+
+    switch (groupBy) {
+      case 'campaign':
+        groupKey = ad.campaign_name || 'Unknown Campaign';
+        rowData.campaignName = ad.campaign_name;
+        break;
+      case 'adset':
+        groupKey = `${ad.campaign_name}|${ad.adset_name}`;
+        rowData.campaignName = ad.campaign_name;
+        rowData.adSetName = ad.adset_name;
+        break;
+      case 'ad':
+        groupKey = `${ad.campaign_name}|${ad.adset_name}|${ad.ad_name}`;
+        rowData.campaignName = ad.campaign_name;
+        rowData.adSetName = ad.adset_name;
+        rowData.adName = ad.ad_name;
+        break;
+      default:
+        groupKey = ad.ad_name || 'Unknown Ad';
+    }
+
+    if (!aggregationMap.has(groupKey)) {
+      aggregationMap.set(groupKey, {
+        ...rowData,
+        _groupKey: groupKey,
+        _totalSpend: 0,
+        _totalRevenue: 0,
+        _totalImpressions: 0,
+        _totalClicks: 0,
+        _totalUniqueClicks: 0,
+        _totalReach: 0,
+        _totalFrequency: 0,
+        _totalCtr: 0,
+        _totalUniqueClickThroughRate: 0,
+        _totalCostPerClick: 0,
+        _totalCostPerThousandImpressions: 0,
+        _totalCostPerThousandReach: 0,
+        _totalPostEngagements: 0,
+        _totalPostReactions: 0,
+        _totalPostComments: 0,
+        _totalPostShares: 0,
+        _totalPostSaves: 0,
+        _totalPageEngagements: 0,
+        _totalLinkClicks: 0,
+        _totalVideoViews: 0,
+        _totalVideoViews25: 0,
+        _totalVideoViews50: 0,
+        _totalVideoViews75: 0,
+        _totalVideoViews100: 0,
+        _totalVideoAvgWatchTime: 0,
+        _totalVideoPlayActions: 0,
+        _totalConversions: 0,
+        _totalConversionValue: 0,
+        _totalCostPerConversion: 0,
+        _totalLeads: 0,
+        _totalCostPerLead: 0,
+        _count: 0,
+        numberOfLeads: 0,
+        numberOfEstimateSets: 0,
+        numberOfJobsBooked: 0,
+        numberOfUnqualifiedLeads: 0,
+      });
+    }
+
+    const row = aggregationMap.get(groupKey)!;
+    const metrics = (ad as any)._fullMetrics || {};
+    
+    // Sum basic metrics
+    row._totalSpend = (row._totalSpend || 0) + (metrics.spend || 0);
+    row._totalImpressions = (row._totalImpressions || 0) + (metrics.impressions || 0);
+    row._totalClicks = (row._totalClicks || 0) + (metrics.clicks || 0);
+    row._totalUniqueClicks = (row._totalUniqueClicks || 0) + (metrics.unique_clicks || 0);
+    row._totalReach = (row._totalReach || 0) + (metrics.reach || 0);
+    
+    // Sum pre-calculated metrics from DB (for averaging later)
+    row._totalFrequency = (row._totalFrequency || 0) + (metrics.frequency || 0);
+    row._totalCtr = (row._totalCtr || 0) + (metrics.ctr || 0);
+    row._totalUniqueClickThroughRate = (row._totalUniqueClickThroughRate || 0) + (metrics.unique_ctr || 0);
+    row._totalCostPerClick = (row._totalCostPerClick || 0) + (metrics.cpc || 0);
+    row._totalCostPerThousandImpressions = (row._totalCostPerThousandImpressions || 0) + (metrics.cpm || 0);
+    row._totalCostPerThousandReach = (row._totalCostPerThousandReach || 0) + (metrics.cpr || 0);
+    
+    // Sum engagement metrics
+    row._totalPostEngagements = (row._totalPostEngagements || 0) + (metrics.post_engagements || 0);
+    row._totalPostReactions = (row._totalPostReactions || 0) + (metrics.post_reactions || 0);
+    row._totalPostComments = (row._totalPostComments || 0) + (metrics.post_comments || 0);
+    row._totalPostShares = (row._totalPostShares || 0) + (metrics.post_shares || 0);
+    row._totalPostSaves = (row._totalPostSaves || 0) + (metrics.post_saves || 0);
+    row._totalPageEngagements = (row._totalPageEngagements || 0) + (metrics.page_engagements || 0);
+    row._totalLinkClicks = (row._totalLinkClicks || 0) + (metrics.link_clicks || 0);
+    
+    // Sum video metrics
+    row._totalVideoViews = (row._totalVideoViews || 0) + (metrics.video_views || 0);
+    row._totalVideoViews25 = (row._totalVideoViews25 || 0) + (metrics.video_views_25pct || 0);
+    row._totalVideoViews50 = (row._totalVideoViews50 || 0) + (metrics.video_views_50pct || 0);
+    row._totalVideoViews75 = (row._totalVideoViews75 || 0) + (metrics.video_views_75pct || 0);
+    row._totalVideoViews100 = (row._totalVideoViews100 || 0) + (metrics.video_views_100pct || 0);
+    row._totalVideoAvgWatchTime = (row._totalVideoAvgWatchTime || 0) + (metrics.video_avg_watch_time || 0);
+    row._totalVideoPlayActions = (row._totalVideoPlayActions || 0) + (metrics.video_play_actions || 0);
+    
+    // Sum conversion metrics
+    row._totalConversions = (row._totalConversions || 0) + (metrics.total_conversions || 0);
+    row._totalConversionValue = (row._totalConversionValue || 0) + (metrics.conversion_value || 0);
+    row._totalCostPerConversion = (row._totalCostPerConversion || 0) + (metrics.cost_per_conversion || 0);
+    row._totalLeads = (row._totalLeads || 0) + (metrics.total_leads || 0);
+    row._totalCostPerLead = (row._totalCostPerLead || 0) + (metrics.cost_per_lead || 0);
+    
+    // Increment count for averaging
+    row._count = (row._count || 0) + 1;
+  });
+
+  console.log(`[AdPerformanceBoard] Created ${aggregationMap.size} initial rows from ads`);
+  console.log('[AdPerformanceBoard] Sample initial rows:', Array.from(aggregationMap.entries()).slice(0,5).map(([k,v])=>({ key: k, totalSpend: v._totalSpend })));
+
+  // Step 7: USE THE MAPS TO PROCESS LEADS
+  filteredLeads.forEach((lead) => {
+    // Look up campaign name from the map using ad name
+    const campaignName = adNameToCampaignMap.get(lead.adName) || 'Unknown Campaign';
+    
+    // Use lead's adSetName if available, otherwise look up from map
+    const adSetName = lead.adSetName || adNameToAdSetMap.get(lead.adName) || 'Unknown Ad Set';
+
+    let groupKey: string;
+
+    switch (groupBy) {
+      case 'campaign':
+        groupKey = campaignName;
+        break;
+      case 'adset':
+        groupKey = `${campaignName}|${adSetName}`;
+        break;
+      case 'ad':
+        groupKey = `${campaignName}|${adSetName}|${lead.adName}`;
+        break;
+      default:
+        groupKey = lead.adName || 'Unknown Ad';
+    }
+
+    // If this group doesn't exist in ad data, create it
+    if (!aggregationMap.has(groupKey)) {
+      const rowData: Partial<BoardRow> = {};
+      
+      if (groupBy === 'campaign' || groupBy === 'adset' || groupBy === 'ad') {
+        rowData.campaignName = campaignName;
+      }
+      if (groupBy === 'adset' || groupBy === 'ad') {
+        rowData.adSetName = adSetName;
+      }
+      if (groupBy === 'ad') {
+        rowData.adName = lead.adName;
+      }
+
+      aggregationMap.set(groupKey, {
+        ...rowData,
+        _groupKey: groupKey,
+        _totalSpend: 0,
+        _totalRevenue: 0,
+        numberOfLeads: 0,
+        numberOfEstimateSets: 0,
+        numberOfJobsBooked: 0,
+        numberOfUnqualifiedLeads: 0,
+      });
+    }
+
+    const row = aggregationMap.get(groupKey)!;
+
+    // Count leads
+    row.numberOfLeads = (row.numberOfLeads || 0) + 1;
+
+    // Count estimate sets
+    if (lead.status === 'estimate_set') {
+      row.numberOfEstimateSets = (row.numberOfEstimateSets || 0) + 1;
+    }
+
+    // Count jobs booked and revenue
+    if ((lead.jobBookedAmount ?? 0) > 0) {
+      row.numberOfJobsBooked = (row.numberOfJobsBooked || 0) + 1;
+      row._totalRevenue = (row._totalRevenue || 0) + lead.jobBookedAmount!;
+    }
+
+    // Count unqualified leads
+    if (lead.status === 'unqualified') {
+      row.numberOfUnqualifiedLeads = (row.numberOfUnqualifiedLeads || 0) + 1;
+    }
+  });
+
+  console.log(`[AdPerformanceBoard] Final aggregation has ${aggregationMap.size} rows`);
+  console.log('[AdPerformanceBoard] Sample aggregated rows (first 5):', Array.from(aggregationMap.entries()).slice(0,5).map(([k,v])=>({ key: k, row: v })));
+
+  // Step 8: Aggregate metrics from DB (use pre-calculated values from saveWeeklyAnalytics)
+  aggregationMap.forEach((row) => {
+    const totalSpend = row._totalSpend || 0;
+    const totalRevenue = row._totalRevenue || 0;
+    const totalImpressions = row._totalImpressions || 0;
+    const totalClicks = row._totalClicks || 0;
+    const totalReach = row._totalReach || 0;
+    const totalLeads = row.numberOfLeads || 0;
+    const estimateSets = row.numberOfEstimateSets || 0;
+    const jobsBooked = row.numberOfJobsBooked || 0;
+    const count = row._count || 1;  // Number of weekly records aggregated
+
+    // Basic metrics (directly from DB)
+    row.spend = Number(totalSpend.toFixed(2));
+    row.impressions = totalImpressions;
+    row.clicks = totalClicks;
+    row.unique_clicks = row._totalUniqueClicks || 0;
+    row.reach = totalReach;
+    
+    // Average pre-calculated metrics from DB (these were calculated during save)
+    row.frequency = count > 0 ? Number(((row._totalFrequency || 0) / count).toFixed(2)) : 0;
+    row.ctr = count > 0 ? Number(((row._totalCtr || 0) / count).toFixed(2)) : 0;
+    row.unique_ctr = count > 0 ? Number(((row._totalUniqueClickThroughRate || 0) / count).toFixed(6)) : 0;
+    row.cpc = count > 0 ? Number(((row._totalCostPerClick || 0) / count).toFixed(6)) : 0;
+    row.cpm = count > 0 ? Number(((row._totalCostPerThousandImpressions || 0) / count).toFixed(6)) : 0;
+    row.cpr = count > 0 ? Number(((row._totalCostPerThousandReach || 0) / count).toFixed(6)) : 0;
+    
+    // Engagement metrics (from DB)
+    row.post_engagements = row._totalPostEngagements || 0;
+    row.post_reactions = row._totalPostReactions || 0;
+    row.post_comments = row._totalPostComments || 0;
+    row.post_shares = row._totalPostShares || 0;
+    row.post_saves = row._totalPostSaves || 0;
+    row.page_engagements = row._totalPageEngagements || 0;
+    row.link_clicks = row._totalLinkClicks || 0;
+    
+    // Video metrics (from DB)
+    row.video_views = row._totalVideoViews || 0;
+    row.video_views_25pct = row._totalVideoViews25 || 0;
+    row.video_views_50pct = row._totalVideoViews50 || 0;
+    row.video_views_75pct = row._totalVideoViews75 || 0;
+    row.video_views_100pct = row._totalVideoViews100 || 0;
+    row.video_avg_watch_time = row._totalVideoAvgWatchTime || 0;
+    row.video_play_actions = row._totalVideoPlayActions || 0;
+    
+    // Conversion metrics (from DB)
+    row.total_conversions = row._totalConversions || 0;
+    row.conversion_value = row._totalConversionValue || 0;
+    row.cost_per_conversion = row._totalCostPerConversion || 0;
+    row.total_leads = row._totalLeads || 0;
+    row.cost_per_lead = row._totalCostPerLead || 0;
+    
+    // Lead cost metrics (calculate only lead-related costs)
+    row.costPerLead = totalLeads > 0 ? Number((totalSpend / totalLeads).toFixed(2)) : null;
+    row.costPerEstimateSet = estimateSets > 0 ? Number((totalSpend / estimateSets).toFixed(2)) : null;
+    row.costPerJobBooked = jobsBooked > 0 ? Number((totalSpend / jobsBooked).toFixed(2)) : null;
+    row.costOfMarketingPercent = totalRevenue > 0 ? Number(((totalSpend / totalRevenue) * 100).toFixed(2)) : null;
+  });
+
+  // Step 9: Filter columns based on requested fields
+  const results: BoardRow[] = [];
+
+  aggregationMap.forEach((row) => {
+    const filteredRow: BoardRow = {};
+
+    // Dimension columns
+    if (columns.campaignName) filteredRow.campaignName = row.campaignName;
+    if (columns.adSetName) filteredRow.adSetName = row.adSetName;
+    if (columns.adName) filteredRow.adName = row.adName;
+    
+    // Basic metrics
+    if (columns.spend) filteredRow.spend = row.spend;
+    if (columns.impressions) filteredRow.impressions = row.impressions;
+    if (columns.clicks) filteredRow.clicks = row.clicks;
+    if (columns.unique_clicks) filteredRow.unique_clicks = row.unique_clicks;
+    if (columns.reach) filteredRow.reach = row.reach;
+    if (columns.frequency) filteredRow.frequency = row.frequency;
+    
+    // CTR metrics
+    if (columns.ctr) filteredRow.ctr = row.ctr;
+    if (columns.unique_ctr) filteredRow.unique_ctr = row.unique_ctr;
+    
+    // Cost metrics
+    if (columns.cpc) filteredRow.cpc = row.cpc;
+    if (columns.cpm) filteredRow.cpm = row.cpm;
+    if (columns.cpr) filteredRow.cpr = row.cpr;
+    
+    // Engagement metrics
+    if (columns.post_engagements) filteredRow.post_engagements = row.post_engagements;
+    if (columns.post_reactions) filteredRow.post_reactions = row.post_reactions;
+    if (columns.post_comments) filteredRow.post_comments = row.post_comments;
+    if (columns.post_shares) filteredRow.post_shares = row.post_shares;
+    if (columns.post_saves) filteredRow.post_saves = row.post_saves;
+    if (columns.page_engagements) filteredRow.page_engagements = row.page_engagements;
+    if (columns.link_clicks) filteredRow.link_clicks = row.link_clicks;
+    
+    // Video metrics
+    if (columns.video_views) filteredRow.video_views = row.video_views;
+    if (columns.video_views_25pct) filteredRow.video_views_25pct = row.video_views_25pct;
+    if (columns.video_views_50pct) filteredRow.video_views_50pct = row.video_views_50pct;
+    if (columns.video_views_75pct) filteredRow.video_views_75pct = row.video_views_75pct;
+    if (columns.video_views_100pct) filteredRow.video_views_100pct = row.video_views_100pct;
+    if (columns.video_avg_watch_time) filteredRow.video_avg_watch_time = row.video_avg_watch_time;
+    if (columns.video_play_actions) filteredRow.video_play_actions = row.video_play_actions;
+    
+    // Conversion metrics
+    if (columns.total_conversions) filteredRow.total_conversions = row.total_conversions;
+    if (columns.conversion_value) filteredRow.conversion_value = row.conversion_value;
+    if (columns.cost_per_conversion) filteredRow.cost_per_conversion = row.cost_per_conversion;
+    if (columns.total_leads) filteredRow.total_leads = row.total_leads;
+    if (columns.cost_per_lead) filteredRow.cost_per_lead = row.cost_per_lead;
+    
+    // Lead metrics
+    if (columns.numberOfLeads) filteredRow.numberOfLeads = row.numberOfLeads;
+    if (columns.numberOfEstimateSets) filteredRow.numberOfEstimateSets = row.numberOfEstimateSets;
+    if (columns.numberOfJobsBooked) filteredRow.numberOfJobsBooked = row.numberOfJobsBooked;
+    if (columns.numberOfUnqualifiedLeads) filteredRow.numberOfUnqualifiedLeads = row.numberOfUnqualifiedLeads;
+    
+    // Lead cost metrics
+    if (columns.costPerLead) filteredRow.costPerLead = row.costPerLead;
+    if (columns.costPerEstimateSet) filteredRow.costPerEstimateSet = row.costPerEstimateSet;
+    if (columns.costPerJobBooked) filteredRow.costPerJobBooked = row.costPerJobBooked;
+    if (columns.costOfMarketingPercent) filteredRow.costOfMarketingPercent = row.costOfMarketingPercent;
+
+    // Store internal fields for sorting
+    (filteredRow as any)._totalSpend = row._totalSpend;
+
+    results.push(filteredRow);
+  });
+
+  // Sort by spend descending (most expensive first)
+  results.sort((a, b) => {
+    const spendA = (a as any)._totalSpend || 0;
+    const spendB = (b as any)._totalSpend || 0;
+    return spendB - spendA;
+  });
+
+  // Remove internal fields before returning
+  results.forEach((row) => {
+    delete (row as any)._totalSpend;
+  });
+
+  console.log(`[AdPerformanceBoard] Returning ${results.length} rows`);
+  const elapsed = Date.now() - startTime;
+  console.log(`[AdPerformanceBoard] Completed in ${elapsed}ms`);
+
+  return results;
+}
