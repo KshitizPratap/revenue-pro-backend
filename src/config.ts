@@ -27,7 +27,8 @@ export const config = {
   
   // Facebook Ads Configuration
   FB_ACCESS_TOKEN: process.env.FB_ACCESS_TOKEN,
-  FB_API_VERSION: process.env.FB_API_VERSION || 'v21.0',
+  FB_API_VERSION: process.env.FB_API_VERSION || 'v24.0',
+  META_USER_TOKEN_ID: '68ac6ebce46631727500499b',
   // Meta OAuth Configuration
   META_CLIENT_ID: process.env.META_CLIENT_ID || '',
   META_CLIENT_SECRET: process.env.META_CLIENT_SECRET || '',
@@ -35,5 +36,4 @@ export const config = {
   // Must match exactly what's configured in Facebook App settings
   META_REDIRECT_URI: process.env.META_REDIRECT_URI || '',
   META_API_VERSION: process.env.META_API_VERSION || '',
- 
 };
