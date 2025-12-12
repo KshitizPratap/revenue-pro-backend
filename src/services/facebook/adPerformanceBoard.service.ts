@@ -176,9 +176,15 @@ interface BoardParams {
   groupBy: 'campaign' | 'adset' | 'ad';
 }
 
+interface BoardResponse {
+  rows: BoardRow[];
+  availableZipCodes: string[];
+  availableServiceTypes: string[];
+}
+
 export async function getAdPerformanceBoard(
   params: BoardParams
-): Promise<BoardRow[]> {
+): Promise<BoardResponse> {
   const { clientId, filters, columns, groupBy } = params;
   console.log('[AdPerformanceBoard] Starting with params:', {
     clientId,
@@ -196,15 +202,9 @@ export async function getAdPerformanceBoard(
 
   if (savedAnalytics.length === 0) {
     console.log('[AdPerformanceBoard] No saved analytics found in database');
-    return [];
+    return { rows: [], availableZipCodes: [], availableServiceTypes: [] };
   }
   console.log('[AdPerformanceBoard] Saved analytics count:', savedAnalytics.length);
-  console.log('[AdPerformanceBoard] Sample saved analytics (first 3):', savedAnalytics.slice(0, 3).map(a => ({
-    campaignId: a.campaignId,
-    adId: a.adId,
-    weekStartDate: a.weekStartDate,
-    metrics: a.metrics ? { spend: a.metrics.spend, impressions: a.metrics.impressions } : null
-  })));
 
   // Map DB fields (camelCase) to EnrichedAd interface (snake_case)
   const enrichedAds: EnrichedAd[] = savedAnalytics.map((analytics) => ({
@@ -237,14 +237,8 @@ export async function getAdPerformanceBoard(
   } as any));
 
   console.log(`[AdPerformanceBoard] Fetched ${enrichedAds.length} ads from database`);
-  console.log('[AdPerformanceBoard] Sample enrichedAds (first 5):', enrichedAds.slice(0,5).map(a=>({
-    campaign_name: a.campaign_name,
-    ad_name: a.ad_name,
-    spend: a.insights?.spend
-  })));
 
   // Step 2: Fetch leads from database
-  const leadService = new LeadService();
   const allLeads = await leadRepository.getLeadsByDateRangeAndClientId(
     clientId,
     filters.startDate,
@@ -253,15 +247,24 @@ export async function getAdPerformanceBoard(
 
   console.log(`[AdPerformanceBoard] Fetched ${allLeads.length} leads from database`);
 
-  console.log('[AdPerformanceBoard] Sample leads (first 5):', allLeads.slice(0,5).map(l=>({
-    id: (l as any)._id || (l as any).id,
-    adName: (l as any).adName,
-    status: (l as any).status,
-    jobBookedAmount: (l as any).jobBookedAmount
-  })));
+  // Collect all unique zip codes and service types from leads for filtering options
+  const uniqueZipCodes = new Set<string>();
+  const uniqueServiceTypes = new Set<string>();
+  allLeads.forEach((lead) => {
+    if (lead.zip) {
+      uniqueZipCodes.add(lead.zip);
+    }
+    if (lead.service) {
+      uniqueServiceTypes.add(lead.service);
+    }
+  });
+  const availableZipCodes = Array.from(uniqueZipCodes).sort();
+  const availableServiceTypes = Array.from(uniqueServiceTypes).sort();
+  console.log(`[AdPerformanceBoard] Found ${availableZipCodes.length} unique zip codes`);
+  console.log(`[AdPerformanceBoard] Found ${availableServiceTypes.length} unique service types`);
 
   // Step 3: Apply lead filters
-  let filteredLeads = allLeads.filter((lead) => !lead.isDeleted);
+  let filteredLeads = allLeads;
 
   if (filters.estimateSetLeads === true) {
     filteredLeads = filteredLeads.filter((lead) => lead.status === 'estimate_set');
@@ -281,27 +284,21 @@ export async function getAdPerformanceBoard(
       ? filters.serviceType
       : [filters.serviceType];
     filteredLeads = filteredLeads.filter((lead) =>
-      serviceTypes.includes(lead.service)
+      lead.service && serviceTypes.includes(lead.service)
     );
   }
 
   if (filters.leadScore) {
     filteredLeads = filteredLeads.filter((lead) => {
       if (!lead.leadScore) return false;
-      if (filters.leadScore!.min && lead.leadScore < filters.leadScore!.min)
+      if (filters.leadScore!.min !== undefined && lead.leadScore < filters.leadScore!.min)
         return false;
-      if (filters.leadScore!.max && lead.leadScore > filters.leadScore!.max)
+      if (filters.leadScore!.max !== undefined && lead.leadScore > filters.leadScore!.max)
         return false;
       return true;
     });
   }
 
-  console.log(`[AdPerformanceBoard] After lead filters: ${filteredLeads.length} leads`);
-  console.log('[AdPerformanceBoard] Sample filteredLeads (first 5):', filteredLeads.slice(0,5).map(l=>({
-    id: (l as any)._id || (l as any).id,
-    adName: (l as any).adName,
-    status: (l as any).status
-  })));
 
   // Step 4: Apply ad-level filters
   let filteredAds = enrichedAds;
@@ -311,7 +308,7 @@ export async function getAdPerformanceBoard(
       ? filters.campaignName
       : [filters.campaignName];
     filteredAds = filteredAds.filter((ad) =>
-      campaigns.includes(ad.campaign_name)
+      ad.campaign_name && campaigns.includes(ad.campaign_name)
     );
   }
 
@@ -329,14 +326,6 @@ export async function getAdPerformanceBoard(
     filteredAds = filteredAds.filter((ad) => adNames.includes(ad.ad_name));
   }
 
-  console.log(`[AdPerformanceBoard] After ad filters: ${filteredAds.length} ads`);
-  console.log('[AdPerformanceBoard] Sample filteredAds (first 5):', filteredAds.slice(0,5).map(a=>({
-    campaign_name: a.campaign_name,
-    adset_name: a.adset_name,
-    ad_name: a.ad_name,
-    spend: a.insights?.spend
-  })));
-
   // Step 5: BUILD THE MAPS (ad name → campaign/adset)
   const adNameToCampaignMap = new Map<string, string>();
   const adNameToAdSetMap = new Map<string, string>();
@@ -346,8 +335,6 @@ export async function getAdPerformanceBoard(
     adNameToAdSetMap.set(ad.ad_name, ad.adset_name);
   });
 
-  console.log(`[AdPerformanceBoard] Built lookup maps with ${adNameToCampaignMap.size} entries`);
-  console.log('[AdPerformanceBoard] Example mapping (first 5):', Array.from(adNameToCampaignMap.entries()).slice(0,5));
 
   // Step 6: Build aggregation map
   const aggregationMap = new Map<string, BoardRow>();
@@ -473,10 +460,17 @@ export async function getAdPerformanceBoard(
   // Step 7: USE THE MAPS TO PROCESS LEADS
   filteredLeads.forEach((lead) => {
     // Look up campaign name from the map using ad name
-    const campaignName = adNameToCampaignMap.get(lead.adName) || 'Unknown Campaign';
+    const campaignName = adNameToCampaignMap.get(lead.adName);
     
     // Use lead's adSetName if available, otherwise look up from map
-    const adSetName = lead.adSetName || adNameToAdSetMap.get(lead.adName) || 'Unknown Ad Set';
+    const adSetName = lead.adSetName || adNameToAdSetMap.get(lead.adName);
+
+    // Skip leads that don't have matching analytics data
+    // This happens when leads reference ads that aren't in the saved analytics
+    if (!campaignName || !adSetName) {
+      console.log(`[AdPerformanceBoard] Skipping lead - no analytics found for ad: ${lead.adName}`);
+      return;
+    }
 
     let groupKey: string;
 
@@ -541,9 +535,6 @@ export async function getAdPerformanceBoard(
       row.numberOfUnqualifiedLeads = (row.numberOfUnqualifiedLeads || 0) + 1;
     }
   });
-
-  console.log(`[AdPerformanceBoard] Final aggregation has ${aggregationMap.size} rows`);
-  console.log('[AdPerformanceBoard] Sample aggregated rows (first 5):', Array.from(aggregationMap.entries()).slice(0,5).map(([k,v])=>({ key: k, row: v })));
 
   // Step 8: Aggregate metrics from DB (use pre-calculated values from saveWeeklyAnalytics)
   aggregationMap.forEach((row) => {
@@ -691,5 +682,9 @@ export async function getAdPerformanceBoard(
   const elapsed = Date.now() - startTime;
   console.log(`[AdPerformanceBoard] Completed in ${elapsed}ms`);
 
-  return results;
+  return {
+    rows: results,
+    availableZipCodes,
+    availableServiceTypes
+  };
 }

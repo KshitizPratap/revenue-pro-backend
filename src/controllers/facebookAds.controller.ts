@@ -298,7 +298,7 @@ export class FacebookAdsController {
       }
 
       // 7️⃣ Call service layer
-      const data = await getAdPerformanceBoard({
+      const result = await getAdPerformanceBoard({
         clientId: clientId as string,
         filters,
         columns,
@@ -306,13 +306,15 @@ export class FacebookAdsController {
       });
 
       // 8️⃣ Return success response
-      console.log(`[API] Returning ${data.length} board rows`);
+      console.log(`[API] Returning ${result.rows.length} board rows`);
       
       res.status(200).json({
         success: true,
-        data,
+        data: result.rows,
+        availableZipCodes: result.availableZipCodes,
+        availableServiceTypes: result.availableServiceTypes,
         meta: {
-          totalRows: data.length,
+          totalRows: result.rows.length,
           groupBy,
           filters,
           columns,
