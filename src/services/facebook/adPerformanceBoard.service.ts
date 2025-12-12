@@ -51,6 +51,8 @@ interface BoardColumns {
   campaignName?: boolean;
   adSetName?: boolean;
   adName?: boolean;
+  service?: boolean;
+  zipCode?: boolean;
   spend?: boolean;
   impressions?: boolean;
   clicks?: boolean;
@@ -95,6 +97,8 @@ interface BoardRow {
   campaignName?: string;
   adSetName?: string;
   adName?: string;
+  service?: string;
+  zipCode?: string;
   spend?: number;
   impressions?: number;
   clicks?: number;
@@ -138,6 +142,8 @@ interface BoardRow {
   _totalSpend?: number;
   _totalRevenue?: number;
   _totalImpressions?: number;
+  _services?: Set<string>;
+  _zipCodes?: Set<string>;
   _totalClicks?: number;
   _totalUniqueClicks?: number;
   _totalReach?: number;
@@ -371,6 +377,8 @@ export async function getAdPerformanceBoard(
         _totalSpend: 0,
         _totalRevenue: 0,
         _totalImpressions: 0,
+        _services: new Set<string>(),
+        _zipCodes: new Set<string>(),
         _totalClicks: 0,
         _totalUniqueClicks: 0,
         _totalReach: 0,
@@ -507,6 +515,8 @@ export async function getAdPerformanceBoard(
         _groupKey: groupKey,
         _totalSpend: 0,
         _totalRevenue: 0,
+        _services: new Set<string>(),
+        _zipCodes: new Set<string>(),
         numberOfLeads: 0,
         numberOfEstimateSets: 0,
         numberOfJobsBooked: 0,
@@ -515,6 +525,16 @@ export async function getAdPerformanceBoard(
     }
 
     const row = aggregationMap.get(groupKey)!;
+
+    // Collect service and zip code
+    if (lead.service) {
+      row._services = row._services || new Set<string>();
+      row._services.add(lead.service);
+    }
+    if (lead.zip) {
+      row._zipCodes = row._zipCodes || new Set<string>();
+      row._zipCodes.add(lead.zip);
+    }
 
     // Count leads
     row.numberOfLeads = (row.numberOfLeads || 0) + 1;
@@ -593,6 +613,10 @@ export async function getAdPerformanceBoard(
     row.costPerEstimateSet = estimateSets > 0 ? Number((totalSpend / estimateSets).toFixed(2)) : null;
     row.costPerJobBooked = jobsBooked > 0 ? Number((totalSpend / jobsBooked).toFixed(2)) : null;
     row.costOfMarketingPercent = totalRevenue > 0 ? Number(((totalSpend / totalRevenue) * 100).toFixed(2)) : null;
+    
+    // Convert service and zipCode sets to comma-separated strings
+    row.service = row._services && row._services.size > 0 ? Array.from(row._services).sort().join(', ') : undefined;
+    row.zipCode = row._zipCodes && row._zipCodes.size > 0 ? Array.from(row._zipCodes).sort().join(', ') : undefined;
   });
 
   // Step 9: Filter columns based on requested fields
@@ -605,6 +629,8 @@ export async function getAdPerformanceBoard(
     if (columns.campaignName) filteredRow.campaignName = row.campaignName;
     if (columns.adSetName) filteredRow.adSetName = row.adSetName;
     if (columns.adName) filteredRow.adName = row.adName;
+    if (columns.service) filteredRow.service = row.service;
+    if (columns.zipCode) filteredRow.zipCode = row.zipCode;
     
     // Basic metrics
     if (columns.spend) filteredRow.spend = row.spend;
