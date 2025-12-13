@@ -313,23 +313,42 @@ export async function getAdPerformanceBoard(
     const campaigns = Array.isArray(filters.campaignName)
       ? filters.campaignName
       : [filters.campaignName];
-    filteredAds = filteredAds.filter((ad) =>
-      ad.campaign_name && campaigns.includes(ad.campaign_name)
-    );
+    filteredAds = filteredAds.filter((ad) => {
+      if (!ad.campaign_name) return false;
+      // Support partial, case-insensitive matching using regex
+      return campaigns.some(searchTerm => {
+        const regex = new RegExp(searchTerm.replace(/[.*+?^${}()|[\]\\]/g, '\\$&'), 'i');
+        return regex.test(ad.campaign_name);
+      });
+    });
   }
 
   if (filters.adSetName) {
     const adSets = Array.isArray(filters.adSetName)
       ? filters.adSetName
       : [filters.adSetName];
-    filteredAds = filteredAds.filter((ad) => adSets.includes(ad.adset_name));
+    filteredAds = filteredAds.filter((ad) => {
+      if (!ad.adset_name) return false;
+      // Support partial, case-insensitive matching using regex
+      return adSets.some(searchTerm => {
+        const regex = new RegExp(searchTerm.replace(/[.*+?^${}()|[\]\\]/g, '\\$&'), 'i');
+        return regex.test(ad.adset_name);
+      });
+    });
   }
 
   if (filters.adName) {
     const adNames = Array.isArray(filters.adName)
       ? filters.adName
       : [filters.adName];
-    filteredAds = filteredAds.filter((ad) => adNames.includes(ad.ad_name));
+    filteredAds = filteredAds.filter((ad) => {
+      if (!ad.ad_name) return false;
+      // Support partial, case-insensitive matching using regex
+      return adNames.some(searchTerm => {
+        const regex = new RegExp(searchTerm.replace(/[.*+?^${}()|[\]\\]/g, '\\$&'), 'i');
+        return regex.test(ad.ad_name);
+      });
+    });
   }
 
   // Step 5: BUILD THE MAPS (ad name → campaign/adset)
