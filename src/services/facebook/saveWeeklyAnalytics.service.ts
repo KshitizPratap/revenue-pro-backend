@@ -1,183 +1,7 @@
 import { getEnrichedAds } from './enrichedAdsService.js';
 import { fbWeeklyAnalyticsRepository } from './repository/FbWeeklyAnalyticsRepository.js';
 import { DateUtils } from '../../utils/date.utils.js';
-
-interface EnrichedAd {
-  campaign_id: string;
-  campaign_name: string;
-  adset_id: string;
-  adset_name: string;
-  ad_id: string;
-  ad_name: string;
-  creative: {
-    id: string | null;
-    name: string | null;
-    primary_text: string | null;
-    headline: string | null;
-    raw: any;
-  } | null;
-  lead_form: {
-    id: string;
-    name: string;
-  } | null;
-  insights: {
-    // Campaign Settings
-    objective?: string;
-    optimization_goal?: string;
-    buying_type?: string;
-    attribution_setting?: string;
-    account_currency?: string;
-    
-    // Basic Metrics
-    impressions: number;
-    reach: number;
-    frequency: number;
-    clicks: number;
-    unique_clicks: number;
-    ctr: number;
-    unique_ctr: number;
-    cpc: number;
-    cpm: number;
-    cpp: number;
-    
-    // Spend & Cost
-    spend: number;
-    social_spend?: number;
-    
-    // Link Clicks & CTR (Extended)
-    inline_link_clicks?: number;
-    outbound_clicks?: number;
-    unique_outbound_clicks?: number;
-    inline_link_click_ctr?: number;
-    unique_inline_link_click_ctr?: number;
-    cost_per_inline_link_click?: number;
-    cost_per_unique_inline_link_click?: number;
-    unique_link_clicks_ctr?: number;
-    outbound_clicks_ctr?: number;
-    unique_outbound_clicks_ctr?: number;
-    cost_per_outbound_click?: number;
-    cost_per_unique_outbound_click?: number;
-    
-    // Engagement Metrics
-    inline_post_engagement?: number;
-    cost_per_inline_post_engagement?: number;
-    post_engagement: number;
-    post_reactions: number;
-    post_comments?: number;
-    post_saves: number;
-    post_shares: number;
-    page_engagement: number;
-    link_clicks: number;
-    
-    // Quality & Delivery Rankings
-    quality_ranking?: string;
-    engagement_rate_ranking?: string;
-    conversion_rate_ranking?: string;
-    delivery?: string;
-    
-    // Video Metrics
-    video_views: number;
-    video_views_p25: number;
-    video_views_p50: number;
-    video_views_p75: number;
-    video_views_p100: number;
-    video_avg_time_watched: number;
-    video_play_actions: number;
-    video_continuous_2_sec_watched?: number;
-    video_thruplay_watched?: number;
-    cost_per_thruplay?: number;
-    cost_per_2_sec_continuous_video_view?: number;
-    
-    // Conversion Metrics
-    conversions: number;
-    conversion_values: number;
-    cost_per_conversion: number;
-    converted_product_quantity?: number;
-    converted_product_value?: number;
-    
-    // Landing Page & Website
-    landing_page_views?: number;
-    cost_per_landing_page_view?: number;
-    website_ctr?: number;
-    offsite_conversions?: number;
-    
-    // Mobile App
-    mobile_app_purchase_roas?: number;
-    website_purchase_roas?: number;
-    purchase_roas?: number;
-    app_store_clicks?: number;
-    deeplink_clicks?: number;
-    
-    // Instant Experience (Canvas)
-    canvas_avg_view_percent?: number;
-    canvas_avg_view_time?: number;
-    instant_experience_clicks_to_open?: number;
-    instant_experience_clicks_to_start?: number;
-    instant_experience_outbound_clicks?: number;
-    
-    // Catalog & Dynamic Ads
-    catalog_segment_actions?: number;
-    catalog_segment_value?: number;
-    catalog_segment_value_mobile_purchase_roas?: number;
-    catalog_segment_value_website_purchase_roas?: number;
-    
-    // Brand Awareness
-    estimated_ad_recall_rate?: number;
-    estimated_ad_recallers?: number;
-    cost_per_estimated_ad_recaller?: number;
-    
-    // Store Traffic
-    store_visit_actions?: number;
-    cost_per_store_visit_action?: number;
-    
-    // Full Funnel Metrics
-    full_view_impressions?: number;
-    full_view_reach?: number;
-    
-    // E-commerce Actions
-    purchases?: number;
-    add_to_cart?: number;
-    initiate_checkout?: number;
-    view_content?: number;
-    search?: number;
-    add_payment_info?: number;
-    complete_registration?: number;
-    contact?: number;
-    customize_product?: number;
-    donate?: number;
-    find_location?: number;
-    schedule?: number;
-    start_trial?: number;
-    submit_application?: number;
-    subscribe?: number;
-    
-    // Lead Metrics
-    leads: number;
-    cost_per_lead: number;
-    
-    // Date Range
-    date_start: string;
-    date_stop: string;
-  };
-}
-
-interface SaveWeeklyAnalyticsParams {
-  clientId: string;
-  adAccountId: string;
-  startDate: string;
-  endDate: string;
-  accessToken: string;
-}
-
-interface SaveResult {
-  savedCount: number;
-  weeksSaved: number;
-  dateRange: {
-    start: string;
-    end: string;
-  };
-  errors: any[];
-}
+import { EnrichedAd, SaveWeeklyAnalyticsParams, SaveResult } from './domain/facebookAds.domain.js';
 
 /**
  * Fetch enriched ads data from Facebook and save it in weekly chunks
@@ -190,7 +14,7 @@ export async function saveWeeklyAnalyticsToDb({
   endDate,
   accessToken
 }: SaveWeeklyAnalyticsParams): Promise<SaveResult> {
-  console.log(`\n[Save Weekly Analytics] 📅 Starting save process`);
+  console.log(`\n[Save Weekly Analytics]  Starting save process`);
   console.log(`[Save Weekly Analytics] Client: ${clientId}`);
   console.log(`[Save Weekly Analytics] Ad Account: ${adAccountId}`);
   console.log(`[Save Weekly Analytics] Date Range: ${startDate} to ${endDate}`);
@@ -198,7 +22,7 @@ export async function saveWeeklyAnalyticsToDb({
   try {
     // Step 1: Split date range into weekly chunks
     const weekPeriods = DateUtils.getMonthWeeks(startDate, endDate);
-    console.log(`[Save Weekly Analytics] 📊 Split into ${weekPeriods.length} weekly periods`);
+    console.log(`[Save Weekly Analytics]  Split into ${weekPeriods.length} weekly periods`);
 
     let totalSaved = 0;
     const allErrors: any[] = [];
@@ -207,7 +31,7 @@ export async function saveWeeklyAnalyticsToDb({
     for (let i = 0; i < weekPeriods.length; i++) {
       const { weekStart, weekEnd } = weekPeriods[i];
       
-      console.log(`\n[Save Weekly Analytics] 🔄 Processing week ${i + 1}/${weekPeriods.length}: ${weekStart} to ${weekEnd}`);
+      console.log(`\n[Save Weekly Analytics]  Processing week ${i + 1}/${weekPeriods.length}: ${weekStart} to ${weekEnd}`);
 
       try {
         // Fetch data for this specific week
@@ -220,13 +44,13 @@ export async function saveWeeklyAnalyticsToDb({
         });
 
         if (!Array.isArray(enrichedAdsData) || enrichedAdsData.length === 0) {
-          console.log(`[Save Weekly Analytics] ⚠️  No data for week ${weekStart} to ${weekEnd}`);
+          console.log(`[Save Weekly Analytics]   No data for week ${weekStart} to ${weekEnd}`);
           continue;
         }
 
         const firstItem = enrichedAdsData[0];
         if (!('campaign_name' in firstItem)) {
-          console.warn(`[Save Weekly Analytics] ⚠️  Unexpected data format for week ${weekStart}`);
+          console.warn(`[Save Weekly Analytics]   Unexpected data format for week ${weekStart}`);
           continue;
         }
 
@@ -414,10 +238,10 @@ export async function saveWeeklyAnalyticsToDb({
         totalSaved += result.saved;
         allErrors.push(...result.errors);
         
-        console.log(`[Save Weekly Analytics] ✅ Saved ${result.saved} records for week ${weekStart}`);
+        console.log(`[Save Weekly Analytics] Saved ${result.saved} records for week ${weekStart}`);
         
       } catch (weekError: any) {
-        console.error(`[Save Weekly Analytics] ❌ Error processing week ${weekStart}:`, weekError.message);
+        console.error(`[Save Weekly Analytics]  Error processing week ${weekStart}:`, weekError.message);
         allErrors.push({
           week: { start: weekStart, end: weekEnd },
           error: weekError.message
@@ -425,11 +249,11 @@ export async function saveWeeklyAnalyticsToDb({
       }
     }
 
-    console.log(`\n[Save Weekly Analytics] 🎉 Complete!`);
+    console.log(`\n[Save Weekly Analytics]  Complete!`);
     console.log(`[Save Weekly Analytics] Total records saved: ${totalSaved}`);
     console.log(`[Save Weekly Analytics] Weeks processed: ${weekPeriods.length}`);
     if (allErrors.length > 0) {
-      console.log(`[Save Weekly Analytics] ⚠️  Errors encountered: ${allErrors.length}`);
+      console.log(`[Save Weekly Analytics]  Errors encountered: ${allErrors.length}`);
     }
 
     return {
@@ -443,7 +267,7 @@ export async function saveWeeklyAnalyticsToDb({
     };
     
   } catch (error: any) {
-    console.error('[Save Weekly Analytics] 💥 Fatal error:', error.message);
+    console.error('[Save Weekly Analytics]  Fatal error:', error.message);
     throw error;
   }
 }

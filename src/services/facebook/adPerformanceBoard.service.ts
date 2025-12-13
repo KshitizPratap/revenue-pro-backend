@@ -2,191 +2,14 @@
 import { LeadService } from '../leads/service/LeadService.js';
 import { leadRepository } from '../leads/repository/LeadRepository.js';
 import { fbWeeklyAnalyticsRepository } from './repository/FbWeeklyAnalyticsRepository.js';
-
-// Import EnrichedAd type from enrichedAdsService
-interface EnrichedAd {
-  campaign_id: string;
-  campaign_name: string;
-  adset_id: string;
-  adset_name: string;
-  ad_id: string;
-  ad_name: string;
-  creative: {
-    id: string | null;
-    name: string | null;
-    primary_text: string | null;
-    headline: string | null;
-    raw: any;
-  } | null;
-  lead_form: {
-    id: string;
-    name: string;
-  } | null;
-  insights: {
-    impressions: number;
-    clicks: number;
-    spend: number;
-    date_start: string;
-    date_stop: string;
-  };
-}
-
-interface BoardFilters {
-  campaignName?: string | string[];
-  adSetName?: string | string[];
-  adName?: string | string[];
-  startDate: string; // YYYY-MM-DD
-  endDate: string;   // YYYY-MM-DD
-  estimateSetLeads?: boolean;
-  jobBookedLeads?: boolean;
-  zipCode?: string | string[];
-  serviceType?: string | string[];
-  leadScore?: {
-    min?: number;
-    max?: number;
-  };
-}
-
-interface BoardColumns {
-  campaignName?: boolean;
-  adSetName?: boolean;
-  adName?: boolean;
-  service?: boolean;
-  zipCode?: boolean;
-  spend?: boolean;
-  impressions?: boolean;
-  clicks?: boolean;
-  unique_clicks?: boolean;
-  reach?: boolean;
-  frequency?: boolean;
-  ctr?: boolean;
-  unique_ctr?: boolean;
-  cpc?: boolean;
-  cpm?: boolean;
-  cpr?: boolean;
-  post_engagements?: boolean;
-  post_reactions?: boolean;
-  post_comments?: boolean;
-  post_shares?: boolean;
-  post_saves?: boolean;
-  page_engagements?: boolean;
-  link_clicks?: boolean;
-  video_views?: boolean;
-  video_views_25pct?: boolean;
-  video_views_50pct?: boolean;
-  video_views_75pct?: boolean;
-  video_views_100pct?: boolean;
-  video_avg_watch_time?: boolean;
-  video_play_actions?: boolean;
-  total_conversions?: boolean;
-  conversion_value?: boolean;
-  cost_per_conversion?: boolean;
-  total_leads?: boolean;
-  cost_per_lead?: boolean;
-  numberOfLeads?: boolean;
-  numberOfEstimateSets?: boolean;
-  numberOfJobsBooked?: boolean;
-  numberOfUnqualifiedLeads?: boolean;
-  costPerLead?: boolean;
-  costPerEstimateSet?: boolean;
-  costPerJobBooked?: boolean;
-  costOfMarketingPercent?: boolean;
-}
-
-interface BoardRow {
-  campaignName?: string;
-  adSetName?: string;
-  adName?: string;
-  service?: string;
-  zipCode?: string;
-  spend?: number;
-  impressions?: number;
-  clicks?: number;
-  unique_clicks?: number;
-  reach?: number;
-  frequency?: number;
-  ctr?: number;
-  unique_ctr?: number;
-  cpc?: number;
-  cpm?: number;
-  cpr?: number;
-  post_engagements?: number;
-  post_reactions?: number;
-  post_comments?: number;
-  post_shares?: number;
-  post_saves?: number;
-  page_engagements?: number;
-  link_clicks?: number;
-  video_views?: number;
-  video_views_25pct?: number;
-  video_views_50pct?: number;
-  video_views_75pct?: number;
-  video_views_100pct?: number;
-  video_avg_watch_time?: number;
-  video_play_actions?: number;
-  total_conversions?: number;
-  conversion_value?: number;
-  cost_per_conversion?: number;
-  total_leads?: number;
-  cost_per_lead?: number;
-  numberOfLeads?: number;
-  numberOfEstimateSets?: number;
-  numberOfJobsBooked?: number;
-  numberOfUnqualifiedLeads?: number;
-  costPerLead?: number | null;
-  costPerEstimateSet?: number | null;
-  costPerJobBooked?: number | null;
-  costOfMarketingPercent?: number | null;
-  
-  _groupKey?: string;
-  _totalSpend?: number;
-  _totalRevenue?: number;
-  _totalImpressions?: number;
-  _services?: Set<string>;
-  _zipCodes?: Set<string>;
-  _totalClicks?: number;
-  _totalUniqueClicks?: number;
-  _totalReach?: number;
-  _totalFrequency?: number;
-  _totalCtr?: number;
-  _totalUniqueClickThroughRate?: number;
-  _totalCostPerClick?: number;
-  _totalCostPerThousandImpressions?: number;
-  _totalCostPerThousandReach?: number;
-  _totalPostEngagements?: number;
-  _totalPostReactions?: number;
-  _totalPostComments?: number;
-  _totalPostShares?: number;
-  _totalPostSaves?: number;
-  _totalPageEngagements?: number;
-  _totalLinkClicks?: number;
-  _totalVideoViews?: number;
-  _totalVideoViews25?: number;
-  _totalVideoViews50?: number;
-  _totalVideoViews75?: number;
-  _totalVideoViews100?: number;
-  _totalVideoAvgWatchTime?: number;
-  _totalVideoPlayActions?: number;
-  _totalConversions?: number;
-  _totalConversionValue?: number;
-  _totalCostPerConversion?: number;
-  _totalLeads?: number;
-  _totalCostPerLead?: number;
-  _count?: number;  // Track number of records for averaging
-}
-
-interface BoardParams {
-  clientId: string;
-  filters: BoardFilters;
-  columns: BoardColumns;
-  groupBy: 'campaign' | 'adset' | 'ad';
-}
-
-interface BoardResponse {
-  rows: BoardRow[];
-  availableZipCodes: string[];
-  availableServiceTypes: string[];
-}
+import { 
+  EnrichedAd, 
+  BoardFilters, 
+  BoardColumns, 
+  BoardRow, 
+  BoardParams, 
+  BoardResponse 
+} from './domain/facebookAds.domain.js';
 
 export async function getAdPerformanceBoard(
   params: BoardParams
@@ -207,10 +30,8 @@ export async function getAdPerformanceBoard(
   );
 
   if (savedAnalytics.length === 0) {
-    console.log('[AdPerformanceBoard] No saved analytics found in database');
     return { rows: [], availableZipCodes: [], availableServiceTypes: [] };
   }
-  console.log('[AdPerformanceBoard] Saved analytics count:', savedAnalytics.length);
 
   // Map DB fields (camelCase) to EnrichedAd interface (snake_case)
   const enrichedAds: EnrichedAd[] = savedAnalytics.map((analytics) => ({
@@ -242,7 +63,6 @@ export async function getAdPerformanceBoard(
     _fullMetrics: analytics.metrics,
   } as any));
 
-  console.log(`[AdPerformanceBoard] Fetched ${enrichedAds.length} ads from database`);
 
   // Step 2: Fetch leads from database
   const allLeads = await leadRepository.getLeadsByDateRangeAndClientId(
@@ -251,7 +71,6 @@ export async function getAdPerformanceBoard(
     filters.endDate
   );
 
-  console.log(`[AdPerformanceBoard] Fetched ${allLeads.length} leads from database`);
 
   // Collect all unique zip codes and service types from leads for filtering options
   const uniqueZipCodes = new Set<string>();
@@ -266,8 +85,6 @@ export async function getAdPerformanceBoard(
   });
   const availableZipCodes = Array.from(uniqueZipCodes).sort();
   const availableServiceTypes = Array.from(uniqueServiceTypes).sort();
-  console.log(`[AdPerformanceBoard] Found ${availableZipCodes.length} unique zip codes`);
-  console.log(`[AdPerformanceBoard] Found ${availableServiceTypes.length} unique service types`);
 
   // Step 3: Apply lead filters
   let filteredLeads = allLeads;
@@ -480,9 +297,6 @@ export async function getAdPerformanceBoard(
     // Increment count for averaging
     row._count = (row._count || 0) + 1;
   });
-
-  console.log(`[AdPerformanceBoard] Created ${aggregationMap.size} initial rows from ads`);
-  console.log('[AdPerformanceBoard] Sample initial rows:', Array.from(aggregationMap.entries()).slice(0,5).map(([k,v])=>({ key: k, totalSpend: v._totalSpend })));
 
   // Step 7: USE THE MAPS TO PROCESS LEADS
   filteredLeads.forEach((lead) => {
