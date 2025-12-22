@@ -40,6 +40,14 @@ router.post('/ad-performance-board', (req, res) => facebookAdsController.getAdPe
 router.post('/save-weekly-analytics', (req, res) => facebookAdsController.saveWeeklyAnalytics(req, res));
 
 /**
+ * POST /api/v1/facebook/force-sync
+ * Force immediate sync of weekly data (bypasses 24-hour check)
+ * Use this for manual "Refresh" button functionality
+ * Query params: clientId, startDate (YYYY-MM-DD), endDate (YYYY-MM-DD)
+ */
+router.post('/force-sync', (req, res) => facebookAdsController.forceSyncWeeklyData(req, res));
+
+/**
  * GET /api/v1/facebook/saved-analytics
  * Get saved weekly analytics from database
  * Query params: clientId, startDate (YYYY-MM-DD), endDate (YYYY-MM-DD)
