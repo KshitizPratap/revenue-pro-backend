@@ -8,6 +8,7 @@ import { saveWeeklyAnalyticsToDb, getSavedWeeklyAnalytics } from '../services/fa
 import UserService from '../services/user/service/service.js';
 import { config } from '../config.js';
 import { BoardFilters, BoardColumns, BoardParams } from '../services/facebook/domain/facebookAds.domain.js';
+import { weeklyDataSyncService } from '../services/facebook/weeklyDataSync.service.js';
 
 export class FacebookAdsController {
   private userService: UserService;
@@ -21,6 +22,7 @@ export class FacebookAdsController {
     this.getAdPerformanceBoard = this.getAdPerformanceBoard.bind(this);
     this.saveWeeklyAnalytics = this.saveWeeklyAnalytics.bind(this);
     this.getSavedAnalytics = this.getSavedAnalytics.bind(this);
+    this.forceSyncWeeklyData = this.forceSyncWeeklyData.bind(this);
   }
 
   /**
@@ -163,8 +165,6 @@ export class FacebookAdsController {
         data: data.adAccounts,
       });
     } catch (err: any) {
-      console.error('\n[API] Error in /api/v1/facebook/ad-accounts:', err.message);
-      console.error('[API] Stack:', err.stack);
       res.status(500).json({ 
         success: false, 
         error: 'Internal server error',
@@ -220,7 +220,7 @@ export class FacebookAdsController {
   async getAdPerformanceBoard(req: Request, res: Response): Promise<void> {
 
     try {
-      // 1️ Extract parameters
+      // Extract parameters
       const { clientId } = req.query;                    // "683acb7561f26ee98f5d2d51"
       const { filters, columns, groupBy } = req.body as {
         filters: BoardFilters;
@@ -228,7 +228,7 @@ export class FacebookAdsController {
         groupBy: 'campaign' | 'adset' | 'ad';
       };
 
-      // 2️ Validate clientId
+      // Validate clientId
       if (!clientId) {
         res.status(400).json({
           success: false,
@@ -237,7 +237,7 @@ export class FacebookAdsController {
         return;
       }
 
-      // 3️ Validate filters (must have startDate & endDate)
+      // Validate filters (must have startDate & endDate)
       if (!filters || !filters.startDate || !filters.endDate) {
         res.status(400).json({
           success: false,
@@ -246,7 +246,7 @@ export class FacebookAdsController {
         return;
       }
 
-      // 4️ Validate columns (at least one column requested)
+      // Validate columns (at least one column requested)
       if (!columns || Object.keys(columns).length === 0) {
         res.status(400).json({
           success: false,
@@ -255,7 +255,7 @@ export class FacebookAdsController {
         return;
       }
 
-      // 5️ Validate groupBy
+      // Validate groupBy
       if (!groupBy || !['campaign', 'adset', 'ad'].includes(groupBy)) {
         res.status(400).json({
           success: false,
@@ -264,7 +264,7 @@ export class FacebookAdsController {
         return;
       }
 
-      // 6️ Validate date format (YYYY-MM-DD)
+      // Validate date format (YYYY-MM-DD)
       const dateRegex = /^\d{4}-\d{2}-\d{2}$/;
       if (!dateRegex.test(filters.startDate) || !dateRegex.test(filters.endDate)) {
         res.status(400).json({
@@ -274,7 +274,15 @@ export class FacebookAdsController {
         return;
       }
 
-      // 7️ Call service layer
+      // AUTO-SYNC: Ensure weekly data exists (non-blocking for faster response)
+      weeklyDataSyncService.ensureWeeklyDataExists(
+        clientId as string,
+        filters.startDate,
+        filters.endDate,
+        false
+      ).catch(() => {});
+
+      // Call service layer
       const params: BoardParams = {
         clientId: clientId as string,
         filters,
@@ -284,12 +292,11 @@ export class FacebookAdsController {
       
       const result = await getAdPerformanceBoard(params);
 
-      // 8️ Return success response
-      console.log(`[API] Returning ${result.rows.length} board rows`);
-      
+      // Return success response
       res.status(200).json({
         success: true,
         data: result.rows,
+        averages: result.averages,
         availableZipCodes: result.availableZipCodes,
         availableServiceTypes: result.availableServiceTypes,
         meta: {
@@ -301,7 +308,7 @@ export class FacebookAdsController {
       });
 
     } catch (error: any) {
-      // 9️⃣ Error handling
+      // Error handling
       res.status(500).json({
         success: false,
         error: error.message || 'Failed to fetch ad performance board data',
@@ -314,7 +321,6 @@ export class FacebookAdsController {
    * POST /api/v1/facebook/save-weekly-analytics?clientId=XXX&startDate=YYYY-MM-DD&endDate=YYYY-MM-DD
    */
   async saveWeeklyAnalytics(req: Request, res: Response): Promise<void> {
-
     try {
       const clientId = req.query.clientId as string;
       const startDate = req.query.startDate as string;
@@ -339,7 +345,7 @@ export class FacebookAdsController {
         return;
       }
 
-      // 3️ Get client user to resolve fbAdAccountId
+      // Get client user to resolve fbAdAccountId
       const clientUser = await this.userService.getUserById(clientId);
       if (!clientUser) {
         res.status(404).json({
@@ -362,7 +368,7 @@ export class FacebookAdsController {
         ? rawAdAccountId
         : `act_${rawAdAccountId}`;
 
-      // 4️ Get Meta access token from hardcoded client
+      // Get Meta access token from hardcoded client
       const metaTokenClientId = '68ac6ebce46631727500499b';
       const metaTokenUser = await this.userService.getUserById(metaTokenClientId);
 
@@ -375,7 +381,7 @@ export class FacebookAdsController {
         return;
       }
 
-      // 5️ Call service to save analytics (split into weekly chunks)
+      // Call service to save analytics (split into weekly chunks)
       const result = await saveWeeklyAnalyticsToDb({
         clientId,
         adAccountId: formattedAdAccountId,
@@ -396,8 +402,6 @@ export class FacebookAdsController {
         },
       });
     } catch (err: any) {
-      console.error('\n[API] Error in /api/v1/facebook/save-weekly-analytics:', err.message);
-      console.error('[API] Stack:', err.stack);
       res.status(500).json({
         success: false,
         error: 'Internal server error',
@@ -417,7 +421,7 @@ export class FacebookAdsController {
       const startDate = req.query.startDate as string;
       const endDate = req.query.endDate as string;
 
-      // 1️ Validate required parameters
+      // Validate required parameters
       if (!clientId || !startDate || !endDate) {
         res.status(400).json({
           success: false,
@@ -426,7 +430,7 @@ export class FacebookAdsController {
         return;
       }
 
-      // 2️ Validate date format
+      // Validate date format
       const dateRegex = /^\d{4}-\d{2}-\d{2}$/;
       if (!dateRegex.test(startDate) || !dateRegex.test(endDate)) {
         res.status(400).json({
@@ -436,7 +440,7 @@ export class FacebookAdsController {
         return;
       }
 
-      // 3️ Call service to retrieve analytics
+      // Call service to retrieve analytics
       const data = await getSavedWeeklyAnalytics({
         clientId,
         startDate,
@@ -456,10 +460,111 @@ export class FacebookAdsController {
         }
       });
     } catch (err: any) {
-      console.error('[API] Stack:', err.stack);
       res.status(500).json({
         success: false,
         error: 'Internal server error',
+        message: err.message,
+      });
+    }
+  }
+
+  /**
+   * Force sync weekly data (manual refresh button)
+   * POST /api/v1/facebook/force-sync?clientId=XXX&startDate=YYYY-MM-DD&endDate=YYYY-MM-DD
+   * 
+   * This bypasses the 24-hour staleness check and forces immediate sync from Meta.
+   * Use this endpoint for "Refresh" button functionality.
+   */
+  async forceSyncWeeklyData(req: Request, res: Response): Promise<void> {
+
+    try {
+      const clientId = req.query.clientId as string;
+      const startDate = req.query.startDate as string;
+      const endDate = req.query.endDate as string;
+
+      // 1️ Validate required parameters
+      if (!clientId || !startDate || !endDate) {
+        res.status(400).json({
+          success: false,
+          error: 'clientId, startDate, and endDate are required',
+        });
+        return;
+      }
+
+      // Validate date format
+      const dateRegex = /^\d{4}-\d{2}-\d{2}$/;
+      if (!dateRegex.test(startDate) || !dateRegex.test(endDate)) {
+        res.status(400).json({
+          success: false,
+          error: 'Dates must be in YYYY-MM-DD format',
+        });
+        return;
+      }
+
+      // Get client user to resolve fbAdAccountId
+      const clientUser = await this.userService.getUserById(clientId);
+      if (!clientUser) {
+        res.status(404).json({
+          success: false,
+          error: 'Client user not found',
+        });
+        return;
+      }
+
+      const rawAdAccountId = (clientUser as any).fbAdAccountId as string | undefined;
+      if (!rawAdAccountId) {
+        res.status(400).json({
+          success: false,
+          error: 'Client does not have a configured Facebook Ad Account ID',
+        });
+        return;
+      }
+
+      const formattedAdAccountId = rawAdAccountId.startsWith('act_')
+        ? rawAdAccountId
+        : `act_${rawAdAccountId}`;
+
+      // Get Meta access token
+      const metaTokenUser = await this.userService.getUserById(config.META_USER_TOKEN_ID);
+      const accessToken = (metaTokenUser as any)?.metaAccessToken as string | undefined;
+
+      if (!accessToken) {
+        res.status(500).json({
+          success: false,
+          error: 'Meta access token not configured',
+        });
+        return;
+      }
+
+      // 5️ Force sync (no staleness check)
+      const syncStartTime = Date.now();
+
+      const result = await saveWeeklyAnalyticsToDb({
+        clientId,
+        adAccountId: formattedAdAccountId,
+        startDate,
+        endDate,
+        accessToken,
+      });
+
+      const syncDuration = ((Date.now() - syncStartTime) / 1000).toFixed(2);
+
+      res.status(200).json({
+        success: true,
+        message: 'Data forcefully refreshed from Meta',
+        data: {
+          totalRecordsSynced: result.savedCount,
+          weeksProcessed: result.weeksSaved,
+          dateRange: result.dateRange,
+          syncDuration: `${syncDuration}s`,
+          syncedAt: new Date().toISOString(),
+        },
+      });
+
+    } catch (err: any) {
+      res.status(500).json({
+        success: false,
+        error: 'Failed to force sync data',
         message: err.message,
       });
     }

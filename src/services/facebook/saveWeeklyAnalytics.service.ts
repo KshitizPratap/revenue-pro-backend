@@ -56,6 +56,7 @@ export async function saveWeeklyAnalyticsToDb({
 
         const ads = enrichedAdsData as EnrichedAd[];
         console.log(`[Save Weekly Analytics] ✓ Found ${ads.length} ads for this week`);
+        console.log(`[Save Weekly Analytics] 🔄 Transforming ${ads.length} ads to database format...`);
 
         // Transform to database format with readable field names
         const weeklyAnalytics = ads.map(ad => ({
@@ -237,8 +238,6 @@ export async function saveWeeklyAnalyticsToDb({
         
         totalSaved += result.saved;
         allErrors.push(...result.errors);
-        
-        console.log(`[Save Weekly Analytics] Saved ${result.saved} records for week ${weekStart}`);
         
       } catch (weekError: any) {
         console.error(`[Save Weekly Analytics]  Error processing week ${weekStart}:`, weekError.message);
