@@ -4,6 +4,7 @@ import { ActualRepository } from "../../actual/repository/repository.js";
 import { DISENGAGEMENT } from '../utils/config.js';
 import mongoose from "mongoose";
 import User from "../../user/repository/models/user.model.js";
+import { facebookConversionApiService } from "../../facebook/conversionApiService.js";
 export class LeadService {
     constructor(leadRepo = leadRepository, aggregationRepo = leadAggregationRepository, actualRepo = new ActualRepository()) {
         this.leadRepo = leadRepo;
@@ -46,14 +47,59 @@ export class LeadService {
         return status === 'job_booked';
     }
     /**
+     * Helper method to check if status should trigger Facebook Conversion API
+     */
+    shouldSendConversionEvent(status) {
+        return status === 'job_booked';
+    }
+    /**
+     * Send Facebook Conversion API event for lead status change
+     */
+    async sendFacebookConversionEvent(lead, newStatus) {
+        try {
+            // Only send if status is job_booked
+            if (!this.shouldSendConversionEvent(newStatus)) {
+                return;
+            }
+            // Get user's pixel credentials
+            const user = await User.findById(lead.clientId);
+            if (!user) {
+                console.log(`User not found for clientId: ${lead.clientId}, skipping Conversion API`);
+                return;
+            }
+            if (!user.fbPixelId || !user.fbPixelToken) {
+                console.log(`Facebook Pixel credentials not configured for clientId: ${lead.clientId}, skipping Conversion API`);
+                return;
+            }
+            // Send the conversion event
+            await facebookConversionApiService.sendLeadEvent({
+                pixelId: user.fbPixelId,
+                pixelToken: user.fbPixelToken,
+                email: lead.email,
+                phone: lead.phone,
+                leadId: String(lead._id),
+            });
+            console.log(`Facebook Conversion API event sent successfully for lead ${String(lead._id)}, status: ${newStatus}`);
+        }
+        catch (error) {
+            // Log error but don't throw - we don't want to fail the lead update if FB API fails
+            console.error(`Error sending Facebook Conversion API event for lead ${lead._id}:`, error.message);
+            // Rethrow the error to show it to the user during testing phase
+            throw error;
+        }
+    }
+    /**
      * Update a lead by ID
      */
     async updateLead(id, data) {
         const existing = await this.leadRepo.getLeadById(id);
         if (!existing)
             throw new Error("Lead not found");
+        const oldStatus = existing.status;
+        let statusChanged = false;
         // Handle status change
         if (data.status && data.status !== existing.status) {
+            statusChanged = true;
             // Update statusHistory before changing status
             this.updateStatusHistory(existing, data.status);
             existing.status = data.status;
@@ -99,6 +145,10 @@ export class LeadService {
         // Set lastManualUpdate timestamp for manual operations
         existing.lastManualUpdate = new Date();
         await existing.save();
+        // Send Facebook Conversion API event if status changed to job_booked
+        if (statusChanged && data.status) {
+            await this.sendFacebookConversionEvent(existing, data.status);
+        }
         return existing;
     }
     /**
@@ -359,6 +409,8 @@ export class LeadService {
         if (!existingLead) {
             throw new Error("Lead not found");
         }
+        const oldStatus = existingLead.status;
+        const statusChanged = status !== oldStatus;
         // Prepare update data
         const updateData = {
             status,
@@ -366,7 +418,7 @@ export class LeadService {
             unqualifiedLeadReason: status === "unqualified" ? (unqualifiedLeadReason || "") : ""
         };
         // Update statusHistory if status is changing
-        if (status !== existingLead.status) {
+        if (statusChanged) {
             this.updateStatusHistory(existingLead, status);
             updateData.statusHistory = existingLead.statusHistory;
         }
@@ -396,6 +448,10 @@ export class LeadService {
         const updated = await this.leadRepo.updateLead(leadId, updateData);
         if (!updated) {
             throw new Error("Failed to update lead");
+        }
+        // Send Facebook Conversion API event if status changed to job_booked
+        if (statusChanged) {
+            await this.sendFacebookConversionEvent(updated, status);
         }
         return updated;
     }

@@ -155,7 +155,7 @@ export default class UserService {
     async deleteUser(userId) {
         await this.repository.deleteUser(userId);
     }
-    async updateFbAdAccountId(userId, fbAdAccountId) {
+    async updateFbAdAccountId(userId, fbAdAccountId, fbPixelId, fbPixelToken) {
         try {
             if (!userId) {
                 throw new CustomError(ErrorCode.INVALID_INPUT, "User ID is required");
@@ -163,9 +163,12 @@ export default class UserService {
             if (!fbAdAccountId) {
                 throw new CustomError(ErrorCode.INVALID_INPUT, "Facebook Ad Account ID is required");
             }
-            const updatedUser = await this.repository.updateUser(userId, {
-                fbAdAccountId
-            });
+            const updateData = { fbAdAccountId };
+            if (fbPixelId && fbPixelToken) {
+                updateData.fbPixelId = fbPixelId;
+                updateData.fbPixelToken = fbPixelToken;
+            }
+            const updatedUser = await this.repository.updateUser(userId, updateData);
             if (!updatedUser) {
                 throw new CustomError(ErrorCode.NOT_FOUND, "User not found");
             }

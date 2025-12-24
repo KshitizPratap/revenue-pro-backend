@@ -61,6 +61,15 @@ const userSchema = new Schema({
     metaConnectedAt: {
         type: Date,
         required: false,
+    },
+    // Facebook Pixel fields
+    fbPixelId: {
+        type: String,
+        required: false,
+    },
+    fbPixelToken: {
+        type: String,
+        required: false,
     }
 }, {
     timestamps: { createdAt: "created_at", updatedAt: "updated_at" },

@@ -2,16 +2,29 @@ import { leadRepository } from '../leads/repository/LeadRepository.js';
 import { fbWeeklyAnalyticsRepository } from './repository/FbWeeklyAnalyticsRepository.js';
 export async function getAdPerformanceBoard(params) {
     const { clientId, filters, columns, groupBy } = params;
-    console.log('[AdPerformanceBoard] Starting with params:', {
-        clientId,
-        groupBy,
-        dateRange: `${filters.startDate} to ${filters.endDate}`,
-    });
-    const startTime = Date.now();
     // Fetch saved weekly analytics from database
     const savedAnalytics = await fbWeeklyAnalyticsRepository.getAnalyticsByDateRange(clientId, filters.startDate, filters.endDate);
     if (savedAnalytics.length === 0) {
-        return { rows: [], availableZipCodes: [], availableServiceTypes: [] };
+        return {
+            rows: [],
+            averages: {
+                fb_frequency: 0,
+                fb_ctr: 0,
+                fb_unique_ctr: 0,
+                fb_cpc: 0,
+                fb_cpm: 0,
+                fb_cpr: 0,
+                fb_cost_per_conversion: 0,
+                fb_cost_per_lead: 0,
+                costPerLead: 0,
+                costPerEstimateSet: 0,
+                costPerJobBooked: 0,
+                costOfMarketingPercent: 0,
+                estimateSetRate: 0,
+            },
+            availableZipCodes: [],
+            availableServiceTypes: []
+        };
     }
     // Map DB fields (camelCase) to EnrichedAd interface (snake_case)
     const enrichedAds = savedAnalytics.map((analytics) => ({
@@ -255,7 +268,6 @@ export async function getAdPerformanceBoard(params) {
         // Skip leads that don't have matching analytics data
         // This happens when leads reference ads that aren't in the saved analytics
         if (!campaignName || !adSetName) {
-            console.log(`[AdPerformanceBoard] Skipping lead - no analytics found for ad: ${lead.adName}`);
             return;
         }
         let groupKey;
@@ -341,13 +353,13 @@ export async function getAdPerformanceBoard(params) {
         row.fb_clicks = totalClicks;
         row.fb_unique_clicks = row._totalUniqueClicks || 0;
         row.fb_reach = totalReach;
-        // Average pre-calculated metrics from DB (these were calculated during save)
-        row.fb_frequency = count > 0 ? Number(((row._totalFrequency || 0) / count).toFixed(2)) : 0;
-        row.fb_ctr = count > 0 ? Number(((row._totalCtr || 0) / count).toFixed(2)) : 0;
-        row.fb_unique_ctr = count > 0 ? Number(((row._totalUniqueClickThroughRate || 0) / count).toFixed(6)) : 0;
-        row.fb_cpc = count > 0 ? Number(((row._totalCostPerClick || 0) / count).toFixed(6)) : 0;
-        row.fb_cpm = count > 0 ? Number(((row._totalCostPerThousandImpressions || 0) / count).toFixed(6)) : 0;
-        row.fb_cpr = count > 0 ? Number(((row._totalCostPerThousandReach || 0) / count).toFixed(6)) : 0;
+        // Calculate metrics from aggregated totals (not pre-calculated averages)
+        row.fb_frequency = totalReach > 0 ? Number((totalImpressions / totalReach).toFixed(2)) : 0;
+        row.fb_ctr = totalImpressions > 0 ? Number(((totalClicks / totalImpressions) * 100).toFixed(2)) : 0;
+        row.fb_unique_ctr = totalImpressions > 0 ? Number((((row._totalUniqueClicks || 0) / totalImpressions) * 100).toFixed(2)) : 0;
+        row.fb_cpc = totalClicks > 0 ? Number((totalSpend / totalClicks).toFixed(2)) : 0;
+        row.fb_cpm = totalImpressions > 0 ? Number(((totalSpend / totalImpressions) * 1000).toFixed(2)) : 0;
+        row.fb_cpr = totalReach > 0 ? Number(((totalSpend / totalReach) * 1000).toFixed(2)) : 0;
         // Engagement metrics (from DB)
         row.fb_post_engagements = row._totalPostEngagements || 0;
         row.fb_post_reactions = row._totalPostReactions || 0;
@@ -367,7 +379,7 @@ export async function getAdPerformanceBoard(params) {
         // Conversion metrics (from DB)
         row.fb_total_conversions = row._totalConversions || 0;
         row.fb_conversion_value = row._totalConversionValue || 0;
-        row.fb_cost_per_conversion = row._totalCostPerConversion || 0;
+        row.fb_cost_per_conversion = row.fb_total_conversions > 0 ? Number((totalSpend / row.fb_total_conversions).toFixed(2)) : 0;
         row.fb_total_leads = row._totalLeads || 0;
         row.fb_cost_per_lead = row.fb_total_leads > 0
             ? Number((totalSpend / row.fb_total_leads).toFixed(2))
@@ -503,11 +515,54 @@ export async function getAdPerformanceBoard(params) {
     results.forEach((row) => {
         delete row._totalSpend;
     });
-    console.log(`[AdPerformanceBoard] Returning ${results.length} rows`);
-    const elapsed = Date.now() - startTime;
-    console.log(`[AdPerformanceBoard] Completed in ${elapsed}ms`);
+    // Calculate overall averages from all rows in aggregationMap
+    let totalRows = 0;
+    let sumSpend = 0;
+    let sumImpressions = 0;
+    let sumClicks = 0;
+    let sumUniqueClicks = 0;
+    let sumReach = 0;
+    let sumTotalConversions = 0;
+    let sumTotalLeads = 0;
+    let sumNumberOfLeads = 0;
+    let sumEstimateSets = 0;
+    let sumJobsBooked = 0;
+    let sumUnqualifiedLeads = 0;
+    let sumRevenue = 0;
+    aggregationMap.forEach((row) => {
+        totalRows++;
+        sumSpend += row._totalSpend || 0;
+        sumImpressions += row._totalImpressions || 0;
+        sumClicks += row._totalClicks || 0;
+        sumUniqueClicks += row._totalUniqueClicks || 0;
+        sumReach += row._totalReach || 0;
+        sumTotalConversions += row._totalConversions || 0;
+        sumTotalLeads += row._totalLeads || 0;
+        sumNumberOfLeads += row.numberOfLeads || 0;
+        sumEstimateSets += row.numberOfEstimateSets || 0;
+        sumJobsBooked += row.numberOfJobsBooked || 0;
+        sumUnqualifiedLeads += row.numberOfUnqualifiedLeads || 0;
+        sumRevenue += row._totalRevenue || 0;
+    });
+    // Only include calculated averages (ratios/percentages), not sums
+    const averages = {
+        fb_frequency: sumReach > 0 ? Number((sumImpressions / sumReach).toFixed(2)) : 0,
+        fb_ctr: sumImpressions > 0 ? Number(((sumClicks / sumImpressions) * 100).toFixed(2)) : 0,
+        fb_unique_ctr: sumImpressions > 0 ? Number(((sumUniqueClicks / sumImpressions) * 100).toFixed(2)) : 0,
+        fb_cpc: sumClicks > 0 ? Number((sumSpend / sumClicks).toFixed(2)) : 0,
+        fb_cpm: sumImpressions > 0 ? Number(((sumSpend / sumImpressions) * 1000).toFixed(2)) : 0,
+        fb_cpr: sumReach > 0 ? Number(((sumSpend / sumReach) * 1000).toFixed(2)) : 0,
+        fb_cost_per_conversion: sumTotalConversions > 0 ? Number((sumSpend / sumTotalConversions).toFixed(2)) : 0,
+        fb_cost_per_lead: sumTotalLeads > 0 ? Number((sumSpend / sumTotalLeads).toFixed(2)) : 0,
+        costPerLead: sumNumberOfLeads > 0 ? Number((sumSpend / sumNumberOfLeads).toFixed(2)) : null,
+        costPerEstimateSet: sumEstimateSets > 0 ? Number((sumSpend / sumEstimateSets).toFixed(2)) : null,
+        costPerJobBooked: sumJobsBooked > 0 ? Number((sumSpend / sumJobsBooked).toFixed(2)) : null,
+        costOfMarketingPercent: sumRevenue > 0 ? Number(((sumSpend / sumRevenue) * 100).toFixed(2)) : null,
+        estimateSetRate: (sumEstimateSets + sumUnqualifiedLeads) > 0 ? Number(((sumEstimateSets / (sumEstimateSets + sumUnqualifiedLeads)) * 100).toFixed(2)) : null,
+    };
     return {
         rows: results,
+        averages,
         availableZipCodes,
         availableServiceTypes
     };

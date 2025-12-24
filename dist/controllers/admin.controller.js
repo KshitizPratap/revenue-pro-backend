@@ -246,7 +246,9 @@ class AdminController {
             leadSheetUrl: user.leadSheetUrl || "",
             isEmailVerified: user.isEmailVerified,
             created_at: user.created_at,
-            status: user.status
+            status: user.status,
+            fbAdAccountId: user.fbAdAccountId,
+            fbPixelId: user.fbPixelId
         };
     }
 }

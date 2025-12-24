@@ -40,6 +40,7 @@ export async function saveWeeklyAnalyticsToDb({ clientId, adAccountId, startDate
                 }
                 const ads = enrichedAdsData;
                 console.log(`[Save Weekly Analytics] ✓ Found ${ads.length} ads for this week`);
+                console.log(`[Save Weekly Analytics] 🔄 Transforming ${ads.length} ads to database format...`);
                 // Transform to database format with readable field names
                 const weeklyAnalytics = ads.map(ad => ({
                     // Client & Account
@@ -196,7 +197,6 @@ export async function saveWeeklyAnalyticsToDb({ clientId, adAccountId, startDate
                 const result = await fbWeeklyAnalyticsRepository.bulkSaveWeeklyAnalytics(weeklyAnalytics);
                 totalSaved += result.saved;
                 allErrors.push(...result.errors);
-                console.log(`[Save Weekly Analytics] Saved ${result.saved} records for week ${weekStart}`);
             }
             catch (weekError) {
                 console.error(`[Save Weekly Analytics]  Error processing week ${weekStart}:`, weekError.message);
