@@ -182,8 +182,19 @@ export class LeadAnalyticsService {
    */
   private async processLeadAnalytics(leads: any[], sort?: string): Promise<AnalyticsResult> {
     const totalLeads = leads.length;
-    const estimateSetCount = leads.filter(lead => lead.status === 'estimate_set').length;
-    const unqualifiedCount = leads.filter(lead => lead.status === 'unqualified').length;
+    // Count qualified statuses: estimate_set, virtual_quote, proposal_presented, job_booked
+    const estimateSetCount = leads.filter(lead =>
+      lead.status === 'estimate_set' ||
+      lead.status === 'virtual_quote' ||
+      lead.status === 'proposal_presented' ||
+      lead.status === 'job_booked'
+    ).length;
+    // Count unqualified statuses: unqualified, estimate_canceled, job_lost
+    const unqualifiedCount = leads.filter(lead =>
+      lead.status === 'unqualified' ||
+      lead.status === 'estimate_canceled' ||
+      lead.status === 'job_lost'
+    ).length;
 
     // Process each analytics section in parallel
     const [zipData, serviceData, dayOfWeekData, ulrData] = await Promise.all([
@@ -191,7 +202,11 @@ export class LeadAnalyticsService {
       this.processServiceAnalysis(leads),
       this.processDayOfWeekAnalysis(leads),
       this.processUnqualifiedReasonsAnalysis(
-        leads.filter(lead => lead.status === 'unqualified'),
+        leads.filter(lead =>
+          lead.status === 'unqualified' ||
+          lead.status === 'estimate_canceled' ||
+          lead.status === 'job_lost'
+        ),
         unqualifiedCount
       )
     ]);
@@ -280,8 +295,13 @@ export class LeadAnalyticsService {
    * Process service analysis
    */
   private async processServiceAnalysis(leads: any[]) {
-    // Calculate total estimate_set for the client
-    const clientEstimateSetCount = leads.filter(lead => lead.status === 'estimate_set').length;
+    // Calculate total qualified leads (netEstimates) for the client
+    const clientEstimateSetCount = leads.filter(lead =>
+      lead.status === 'estimate_set' ||
+      lead.status === 'virtual_quote' ||
+      lead.status === 'proposal_presented' ||
+      lead.status === 'job_booked'
+    ).length;
     const serviceGroups: Record<string, {
       estimateSet: number;
       unqualified: number;
@@ -315,7 +335,7 @@ export class LeadAnalyticsService {
     return Object.entries(serviceGroups)
       .map(([service, { estimateSet, unqualified, virtualQuote, estimateCanceled, proposalPresented, jobBooked, jobLost }]) => {
         // estimateSetRate: netEstimates / (netEstimates + netUnqualifieds)
-        // percentage: estimateSetOfService/TotalEstimateSet
+        // percentage: netEstimatesOfService / TotalNetEstimates
         const netEstimates = estimateSet + virtualQuote + proposalPresented + jobBooked;
         const netUnqualifieds = unqualified + estimateCanceled + jobLost;
         const denominator = netEstimates + netUnqualifieds;
@@ -323,7 +343,7 @@ export class LeadAnalyticsService {
           service,
           estimateSetCount: estimateSet,
           estimateSetRate: denominator > 0 ? ((netEstimates / denominator) * 100).toFixed(1) : '0.0',
-          percentage: clientEstimateSetCount > 0 ? ((estimateSet / clientEstimateSetCount) * 100).toFixed(1) : '0.0'
+          percentage: clientEstimateSetCount > 0 ? ((netEstimates / clientEstimateSetCount) * 100).toFixed(1) : '0.0'
         };
       })
       .sort((a, b) => b.estimateSetCount - a.estimateSetCount);
