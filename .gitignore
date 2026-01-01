@@ -22,7 +22,6 @@ jspm_packages/
 
 # Build output
 .cache/
-dist/
 
 # TypeScript
 *.tsbuildinfo
