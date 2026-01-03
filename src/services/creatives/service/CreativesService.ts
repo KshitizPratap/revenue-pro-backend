@@ -143,6 +143,7 @@ export class CreativesService {
     accessToken: string
   ): Promise<any> {
     try {
+      console.log(`[Creatives] Fetching video details for ${videoId}`);
       const fields = 'source,picture,length,thumbnails.limit(1){uri,width,height,scale,is_preferred}';
       
       const videoData = await fbGet(`/${videoId}`, { fields }, accessToken);
@@ -439,6 +440,19 @@ export class CreativesService {
       imageHash: finalImageHash,
       creativeType
     });
+
+    // If we have image hash but no image URL, try to fetch the URL from hash
+    if (finalImageHash && !finalImageUrl) {
+      console.log(`[Creatives] Creative ${creativeData.id} has image hash but no URL, fetching from hash...`);
+      const imageUrlFromHash = await this.fetchImageUrlFromHash(finalImageHash, adAccountId, accessToken);
+      if (imageUrlFromHash) {
+        finalImageUrl = imageUrlFromHash;
+        finalThumbnailUrl = finalThumbnailUrl || imageUrlFromHash;
+        console.log(`[Creatives] ✅ Retrieved image URL from hash for creative ${creativeData.id}`);
+      } else {
+        console.log(`[Creatives] ⚠️ Failed to retrieve image URL from hash for creative ${creativeData.id}`);
+      }
+    }
 
     // VALIDATION: Ensure we have actual media for the classified type
     // This must happen BEFORE returning the object to prevent saving invalid data
