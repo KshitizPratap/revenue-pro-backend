@@ -12,7 +12,8 @@ export const ESTIMATE_SET_STATUSES: readonly LeadStatus[] = [
   'estimate_set',
   'virtual_quote',
   'proposal_presented',
-  'job_booked'
+  'job_booked',
+  'estimate_rescheduled'
 ] as const;
 
 export const UNQUALIFIED_STATUSES: readonly LeadStatus[] = [
@@ -34,6 +35,7 @@ export function calculateEstimateSetCount(statusCounts: {
   job_booked?: number;
   estimate_canceled?: number;
   job_lost?: number;
+  estimate_rescheduled?: number;
 }): number {
   return (
     (statusCounts.estimate_set || 0) +
@@ -41,7 +43,8 @@ export function calculateEstimateSetCount(statusCounts: {
     (statusCounts.proposal_presented || 0) +
     (statusCounts.job_booked || 0) +
     (statusCounts.estimate_canceled || 0) +
-    (statusCounts.job_lost || 0)
+    (statusCounts.job_lost || 0) +
+    (statusCounts.estimate_rescheduled || 0)
   );
 }
 
@@ -92,6 +95,7 @@ export function getEstimateSetBreakdown(leads: Array<{ status: LeadStatus }>) {
     job_booked: 0,
     estimate_canceled: 0,
     job_lost: 0,
+    estimate_rescheduled: 0,
     unqualified: 0
   };
 
@@ -102,6 +106,7 @@ export function getEstimateSetBreakdown(leads: Array<{ status: LeadStatus }>) {
     else if (lead.status === 'job_booked') breakdown.job_booked += 1;
     else if (lead.status === 'estimate_canceled') breakdown.estimate_canceled += 1;
     else if (lead.status === 'job_lost') breakdown.job_lost += 1;
+    else if (lead.status === 'estimate_rescheduled') breakdown.estimate_rescheduled += 1;
     else if (lead.status === 'unqualified') breakdown.unqualified += 1;
   });
 
