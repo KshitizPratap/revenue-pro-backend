@@ -20,14 +20,13 @@ jobs:
       - name: Dump & Restore MongoDB
         run: |
           docker run --rm -v $PWD/mongodump:/dump mongo:7 bash -c "
-            echo 'Dumping production database...'
+            echo 'Dumping production database (revenue-pro)...'
             mongodump --uri='${{ secrets.MONGO_PROD_URI }}' --archive=/dump/dump.gz --gzip &&
             
-            echo 'Restoring to development database...'
-            mongorestore --uri='${{ secrets.MONGO_DEV_URI }}' --archive=/dump/dump.gz --gzip --drop
-
-            echo 'Restoring to RICKEY database...'
-            mongorestore --uri='${{ secrets.MONGO_RICKEY_URI }}' --archive=/dump/dump.gz --gzip --drop --nsFrom='revenue-pro-dev.*' --nsTo='revenue-pro.*'
+            echo 'Restoring to development database (revenue-pro-dev)...'
+            mongorestore --uri='${{ secrets.MONGO_DEV_URI }}' --archive=/dump/dump.gz --gzip --drop --nsFrom='revenue-pro.*' --nsTo='revenue-pro-dev.*'
+            
+            echo 'Database sync completed successfully!'
           "
 
       # Step 4: Clean up temporary dump folder (optional)
