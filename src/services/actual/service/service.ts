@@ -100,22 +100,6 @@ export class ActualService {
       }
     }
 
-    const payload: IWeeklyActual = {
-      userId,
-      startDate: week.weekStart,
-      endDate: week.weekEnd,
-      testingBudgetSpent: data.testingBudgetSpent ?? 0,
-      awarenessBrandingBudgetSpent: data.awarenessBrandingBudgetSpent ?? 0,
-      leadGenerationBudgetSpent: data.leadGenerationBudgetSpent ?? 0,
-      metaBudgetSpent: data.metaBudgetSpent !== undefined ? data.metaBudgetSpent : null,
-      revenue: data.revenue ?? 0,
-      sales: data.sales ?? 0,
-      leads: data.leads ?? 0,
-      estimatesRan: data.estimatesRan ?? 0,
-      estimatesSet: data.estimatesSet ?? 0,
-      adNamesAmount: data.adNamesAmount ?? [],
-    };
-
     const existing = await this.actualRepository.findActualByStartDate(
       userId,
       week.weekStart
@@ -124,11 +108,58 @@ export class ActualService {
     let actual: IWeeklyActualDocument | null;
 
     if (existing) {
+      // For updates: only include fields that are actually provided in data
+      // Preserve existing values for fields not sent from frontend
+      const existingData = existing.toObject();
+      const updatePayload: Partial<IWeeklyActual> = {
+        userId,
+        startDate: week.weekStart,
+        endDate: week.weekEnd,
+      };
+
+      // Fields that can be updated (excluding userId, startDate, endDate which are always set)
+      const updatableFields: (keyof IWeeklyActual)[] = [
+        'testingBudgetSpent',
+        'awarenessBrandingBudgetSpent',
+        'leadGenerationBudgetSpent',
+        'metaBudgetSpent',
+        'revenue',
+        'sales',
+        'leads',
+        'estimatesRan',
+        'estimatesSet',
+        'adNamesAmount',
+      ];
+
+      // Only include fields that are explicitly provided in data (not undefined)
+      updatableFields.forEach((field) => {
+        if (data[field] !== undefined) {
+          updatePayload[field] = data[field] as any;
+        }
+      });
+
+      // Merge with existing data to preserve fields not in update
       actual = await this.actualRepository.updateActual({
-        ...existing.toObject(),
-        ...payload,
+        ...existingData,
+        ...updatePayload,
       });
     } else {
+      // For new records: use defaults for fields not provided
+      const payload: IWeeklyActual = {
+        userId,
+        startDate: week.weekStart,
+        endDate: week.weekEnd,
+        testingBudgetSpent: data.testingBudgetSpent ?? 0,
+        awarenessBrandingBudgetSpent: data.awarenessBrandingBudgetSpent ?? 0,
+        leadGenerationBudgetSpent: data.leadGenerationBudgetSpent ?? 0,
+        metaBudgetSpent: data.metaBudgetSpent !== undefined ? data.metaBudgetSpent : null,
+        revenue: data.revenue ?? 0,
+        sales: data.sales ?? 0,
+        leads: data.leads ?? 0,
+        estimatesRan: data.estimatesRan ?? 0,
+        estimatesSet: data.estimatesSet ?? 0,
+        adNamesAmount: data.adNamesAmount ?? [],
+      };
       actual = await this.actualRepository.createActual(payload);
     }
 
