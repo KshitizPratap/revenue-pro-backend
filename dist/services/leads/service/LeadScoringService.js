@@ -2,6 +2,7 @@ import _ from "lodash";
 import { leadRepository } from "../repository/LeadRepository.js";
 import { conversionRateRepository } from "../repository/ConversionRateRepository.js";
 import { FIELD_WEIGHTS, getMonthlyName, createConversionRatesMap, getConversionRateFromMap, getMonthIndex, isEmptyValue } from "../utils/leads.util.js";
+import { isEstimateSetStatus, isUnqualifiedStatus } from "../utils/estimateSetConstants.js";
 export class LeadScoringService {
     constructor(leadRepo = leadRepository, conversionRateRepo = conversionRateRepository) {
         this.leadRepo = leadRepo;
@@ -223,17 +224,12 @@ export class LeadScoringService {
         for (const lead of clientLeads) {
             if (!matches(lead))
                 continue;
-            // Count qualified/successful statuses
-            if (lead.status === 'estimate_set' ||
-                lead.status === 'virtual_quote' ||
-                lead.status === 'proposal_presented' ||
-                lead.status === 'job_booked') {
+            // Count qualified/successful statuses using centralized helper
+            if (isEstimateSetStatus(lead.status)) {
                 netEstimates++;
             }
-            // Count unqualified/unsuccessful statuses
-            else if (lead.status === 'unqualified' ||
-                lead.status === 'estimate_canceled' ||
-                lead.status === 'job_lost') {
+            // Count unqualified/unsuccessful statuses using centralized helper
+            else if (isUnqualifiedStatus(lead.status)) {
                 netUnqualifieds++;
             }
         }

@@ -131,18 +131,19 @@ export class ActualService {
         'adNamesAmount',
       ];
 
-      // Only include fields that are explicitly provided in data (not undefined)
+      // Build payload: use provided values or preserve existing values
       updatableFields.forEach((field) => {
         if (data[field] !== undefined) {
+          // Use provided value from frontend
           updatePayload[field] = data[field] as any;
+        } else {
+          // Preserve existing value from database
+          updatePayload[field] = existingData[field] as any;
         }
       });
 
-      // Merge with existing data to preserve fields not in update
-      actual = await this.actualRepository.updateActual({
-        ...existingData,
-        ...updatePayload,
-      });
+      // Update with complete payload (all fields included to preserve existing values)
+      actual = await this.actualRepository.updateActual(updatePayload as IWeeklyActual);
     } else {
       // For new records: use defaults for fields not provided
       const payload: IWeeklyActual = {

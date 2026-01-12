@@ -18,7 +18,6 @@ import dummyRouter from './dummy.routes.js';
 import creativesRouter from './creatives.routes.js';
 import { addContext, } from "../middlewares/common.middleware.js";
 import { verifyTokenMiddleware } from "../middlewares/auth.middleware.js";
-import { config } from "../config.js";
 // Routes that require JWT authentication
 const authenticatedRoutes = [
     { path: "/api/v1/actual", router: reportRouter },
@@ -49,7 +48,7 @@ const otherRoutes = [
 const configureRoutes = (app) => {
     // add health route
     app.use("/health", [], (req, res) => {
-        res.status(200).json({ message: "I am healthy alright!!!", config: config });
+        res.status(200).json({ message: "I am healthy alright!!!" });
     });
     // Add this before your routes
     app.use((err, req, res, next) => {

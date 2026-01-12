@@ -8,7 +8,7 @@ export class ActualRepository {
         return res;
     }
     async updateActual(data) {
-        const res = await this.model.findOneAndUpdate({ userId: data.userId, startDate: data.startDate }, data, { new: true, upsert: true, setDefaultsOnInsert: true });
+        const res = await this.model.findOneAndUpdate({ userId: data.userId, startDate: data.startDate }, { $set: data }, { new: true, upsert: true, setDefaultsOnInsert: true });
         return res;
     }
     async getActualsByDateRange(startDate, endDate, userId) {

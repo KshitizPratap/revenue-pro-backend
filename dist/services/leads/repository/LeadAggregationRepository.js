@@ -1,4 +1,5 @@
 import LeadModel from './models/leads.model.js';
+import { ESTIMATE_SET_STATUSES, UNQUALIFIED_STATUSES } from '../utils/estimateSetConstants.js';
 export class LeadAggregationRepository {
     // Helper method to add soft delete filter consistently
     addSoftDeleteFilter(query) {
@@ -35,6 +36,41 @@ export class LeadAggregationRepository {
                     $group: {
                         _id: "$status",
                         count: { $sum: 1 }
+                    }
+                },
+                {
+                    $group: {
+                        _id: null,
+                        statuses: { $push: { status: "$_id", count: "$count" } },
+                        netEstimateSet: {
+                            $sum: {
+                                $cond: [
+                                    { $in: ["$_id", [...ESTIMATE_SET_STATUSES]] },
+                                    "$count",
+                                    0
+                                ]
+                            }
+                        },
+                        netUnqualified: {
+                            $sum: {
+                                $cond: [
+                                    { $in: ["$_id", [...UNQUALIFIED_STATUSES]] },
+                                    "$count",
+                                    0
+                                ]
+                            }
+                        }
+                    }
+                },
+                {
+                    $unwind: "$statuses"
+                },
+                {
+                    $project: {
+                        _id: "$statuses.status",
+                        count: "$statuses.count",
+                        netEstimateSet: "$netEstimateSet",
+                        netUnqualified: "$netUnqualified"
                     }
                 }
             ]).exec()

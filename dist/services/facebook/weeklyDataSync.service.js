@@ -4,6 +4,7 @@ import { config } from '../../config.js';
 import { DateUtils } from '../../utils/date.utils.js';
 import { fbWeeklyAnalyticsRepository } from './repository/FbWeeklyAnalyticsRepository.js';
 import { saveWeeklyAnalyticsToDb } from './saveWeeklyAnalytics.service.js';
+import { creativesService } from '../creatives/service/CreativesService.js';
 export class WeeklyDataSyncService {
     constructor() {
         this.userService = new UserService();
@@ -14,13 +15,17 @@ export class WeeklyDataSyncService {
      */
     async ensureWeeklyDataExists(clientId, startDate, endDate, waitForSync = false) {
         try {
-            // Check what weeks are missing (fast query)
-            const [missingWeeks, currentWeekNeedsUpdate] = await Promise.all([
+            // Check what weeks are missing or incomplete (fast query)
+            const [missingWeeks, incompleteWeeks, currentWeekNeedsUpdate] = await Promise.all([
                 this.findMissingWeeks(clientId, startDate, endDate),
+                this.findIncompleteWeeks(clientId, startDate, endDate),
                 this.isCurrentWeekStale(clientId),
             ]);
+            // Combine missing and incomplete weeks
+            const weeksToSync = [...missingWeeks, ...incompleteWeeks];
+            const uniqueWeeksToSync = Array.from(new Map(weeksToSync.map(w => [w.weekStart, w])).values());
             // If nothing to sync, exit early
-            if (missingWeeks.length === 0 && !currentWeekNeedsUpdate) {
+            if (uniqueWeeksToSync.length === 0 && !currentWeekNeedsUpdate) {
                 return;
             }
             // Get client's ad account info and access token in parallel
@@ -43,7 +48,7 @@ export class WeeklyDataSyncService {
                 return;
             }
             // Perform the sync
-            const syncPromise = this.performSync(clientId, formattedAdAccountId, startDate, endDate, accessToken, missingWeeks.length, currentWeekNeedsUpdate);
+            const syncPromise = this.performSync(clientId, formattedAdAccountId, startDate, endDate, accessToken, uniqueWeeksToSync.length, currentWeekNeedsUpdate);
             // If waitForSync is true, await the sync. Otherwise, let it run in background
             if (waitForSync) {
                 await syncPromise;
@@ -61,6 +66,7 @@ export class WeeklyDataSyncService {
      * Perform the actual sync operation
      */
     async performSync(clientId, adAccountId, startDate, endDate, accessToken, missingWeeksCount, currentWeekNeedsUpdate) {
+        // Step 1: Save weekly analytics data
         await saveWeeklyAnalyticsToDb({
             clientId,
             adAccountId,
@@ -68,6 +74,27 @@ export class WeeklyDataSyncService {
             endDate,
             accessToken,
         });
+        // Step 2: Auto-fetch creatives for the synced weeks (non-blocking)
+        if (config.AUTO_FETCH_CREATIVES) {
+            this.fetchCreativesForSyncedWeeks(clientId, adAccountId, startDate, endDate, accessToken).catch((error) => {
+                console.error('[WeeklyDataSync] Failed to auto-fetch creatives:', error.message);
+            });
+        }
+    }
+    /**
+     * Automatically fetch and save creatives for ads in the synced date range
+     * Runs in background without blocking the main sync
+     */
+    async fetchCreativesForSyncedWeeks(clientId, adAccountId, startDate, endDate, accessToken) {
+        try {
+            console.log(`[WeeklyDataSync] 🎨 Auto-fetching creatives for ${startDate} to ${endDate}`);
+            const result = await creativesService.fetchAndSaveCreativesForClient(clientId, adAccountId, accessToken, startDate, endDate);
+            console.log(`[WeeklyDataSync] ✅ Creatives auto-fetch complete: ${result.saved} saved, ${result.failed} failed`);
+        }
+        catch (error) {
+            console.error('[WeeklyDataSync] ❌ Error auto-fetching creatives:', error.message);
+            // Don't throw - let it fail silently in background
+        }
     }
     /**
      * Find which weeks are missing from the database for given date range
@@ -80,9 +107,40 @@ export class WeeklyDataSyncService {
         const existingData = await fbWeeklyAnalyticsRepository.getAnalyticsByDateRange(clientId, startDate, endDate);
         // Create a set of existing week start dates for O(1) lookup
         const existingWeekStarts = new Set(existingData.map((record) => record.weekStartDate));
-        // Find missing weeks
+        // Find missing weeks (weeks with NO data at all)
         const missingWeeks = expectedWeeks.filter((week) => !existingWeekStarts.has(week.weekStart));
         return missingWeeks;
+    }
+    /**
+     * Find weeks that have data but are incomplete
+     * (week has ended but data was fetched before week ended)
+     */
+    async findIncompleteWeeks(clientId, startDate, endDate) {
+        // Get existing data from database
+        const existingData = await fbWeeklyAnalyticsRepository.getAnalyticsByDateRange(clientId, startDate, endDate);
+        if (existingData.length === 0) {
+            return []; // No data, will be caught by findMissingWeeks
+        }
+        const now = new Date();
+        const incompleteWeeksMap = new Map();
+        existingData.forEach((record) => {
+            const weekEnd = new Date(record.weekEndDate + 'T23:59:59Z');
+            // ✅ Only check weeks that have already ended
+            if (weekEnd < now) {
+                // ✅ If week is not marked complete, it needs re-fetching
+                if (!record.isWeekComplete) {
+                    incompleteWeeksMap.set(record.weekStartDate, {
+                        weekStart: record.weekStartDate,
+                        weekEnd: record.weekEndDate
+                    });
+                }
+            }
+        });
+        const incompleteWeeks = Array.from(incompleteWeeksMap.values());
+        if (incompleteWeeks.length > 0) {
+            console.log(`[WeeklyDataSync] 🔄 Found ${incompleteWeeks.length} incomplete weeks that need re-syncing`);
+        }
+        return incompleteWeeks;
     }
     /**
      * Check if the current week's data is stale (older than 24 hours)

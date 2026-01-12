@@ -552,8 +552,41 @@ export class TargetService {
         if (weeksInMonth.length === 0) {
             return [];
         }
-        // Use getWeeklyTarget to get the target for each week (there can only be one per week per user)
-        const weeklyTargets = await Promise.all(weeksInMonth.map(week => this.getWeeklyTarget(userId, week.weekStart)));
+        // OPTIMIZATION: Fetch all weekly targets for the month in ONE query instead of N queries
+        const weekStartDates = weeksInMonth.map(w => w.weekStart);
+        const minDate = weekStartDates[0];
+        const maxDate = weekStartDates[weekStartDates.length - 1];
+        const allTargets = await this.targetRepository.getTargetsByDateRange(new Date(minDate), new Date(maxDate), userId);
+        // Create a map for O(1) lookup
+        const targetMap = new Map();
+        allTargets.forEach(target => {
+            targetMap.set(target.startDate, target);
+        });
+        // Build weekly targets array using the same logic as getWeeklyTarget
+        const weeklyTargets = weeksInMonth.map(week => {
+            const target = targetMap.get(week.weekStart);
+            if (target) {
+                return target;
+            }
+            else {
+                // Return zero-filled target (same as getWeeklyTarget does)
+                return {
+                    userId,
+                    startDate: week.weekStart,
+                    endDate: week.weekEnd,
+                    appointmentRate: 0,
+                    avgJobSize: 0,
+                    closeRate: 0,
+                    com: 0,
+                    revenue: 0,
+                    showRate: 0,
+                    managementCost: 0,
+                    queryType: "",
+                    year: week.year,
+                    weekNumber: week.weekNumber,
+                };
+            }
+        });
         return weeklyTargets;
     }
     async getAggregatedYearlyTarget(userId, startDate, endDate, queryType) {
@@ -565,7 +598,7 @@ export class TargetService {
             const monthEnd = new Date(year, month + 1, 0);
             const monthStartStr = monthStart.toISOString().slice(0, 10);
             const monthEndStr = monthEnd.toISOString().slice(0, 10);
-            // Get all weeks in this month
+            // Get all weeks in this month (optimized internally by getAggregatedMonthlyTarget)
             const weeklyTargets = await this.getAggregatedMonthlyTarget(userId, monthStartStr, monthEndStr, "monthly");
             let aggregated;
             if (weeklyTargets.length === 0) {

@@ -1,6 +1,7 @@
 import { leadRepository } from '../leads/repository/LeadRepository.js';
 import { fbWeeklyAnalyticsRepository } from './repository/FbWeeklyAnalyticsRepository.js';
 import { creativesRepository } from '../creatives/repository/CreativesRepository.js';
+import { calculateEstimateSetCount, calculateUnqualifiedCount, calculateEstimateSetRate, isEstimateSetStatus } from '../leads/utils/estimateSetConstants.js';
 export async function getAdPerformanceBoard(params) {
     const { clientId, filters, columns, groupBy } = params;
     // Fetch saved weekly analytics from database
@@ -89,8 +90,9 @@ export async function getAdPerformanceBoard(params) {
                 date_start: analytics.weekStartDate,
                 date_stop: analytics.weekEndDate,
             },
-            // Store full metrics for aggregation
+            // Store full metrics and campaign settings for aggregation
             _fullMetrics: analytics.metrics,
+            _optimizationGoal: analytics.optimizationGoal,
         };
     });
     // Step 2: Fetch leads from database
@@ -111,7 +113,7 @@ export async function getAdPerformanceBoard(params) {
     // Step 3: Apply lead filters
     let filteredLeads = allLeads;
     if (filters.estimateSetLeads === true) {
-        filteredLeads = filteredLeads.filter((lead) => lead.status === 'estimate_set');
+        filteredLeads = filteredLeads.filter((lead) => isEstimateSetStatus(lead.status));
     }
     if (filters.jobBookedLeads === true) {
         filteredLeads = filteredLeads.filter((lead) => (lead.jobBookedAmount ?? 0) > 0);
@@ -209,9 +211,12 @@ export async function getAdPerformanceBoard(params) {
                 rowData.campaignName = ad.campaign_name;
                 rowData.adSetName = ad.adset_name;
                 rowData.adName = ad.ad_name;
-                // Include creative data when grouping by ad
+                // Include creative data and optimization goal when grouping by ad
                 if (ad.creative) {
                     rowData.creative = ad.creative;
+                }
+                if (ad._optimizationGoal) {
+                    rowData.optimizationGoal = ad._optimizationGoal;
                 }
                 break;
             default:
@@ -249,6 +254,7 @@ export async function getAdPerformanceBoard(params) {
                 _totalVideoViews100: 0,
                 _totalVideoAvgWatchTime: 0,
                 _totalVideoPlayActions: 0,
+                _totalVideoContinuous2SecWatched: 0,
                 _totalConversions: 0,
                 _totalConversionValue: 0,
                 _totalCostPerConversion: 0,
@@ -296,6 +302,7 @@ export async function getAdPerformanceBoard(params) {
         row._totalVideoViews100 = (row._totalVideoViews100 || 0) + (metrics.video_views_100pct || 0);
         row._totalVideoAvgWatchTime = (row._totalVideoAvgWatchTime || 0) + (metrics.video_avg_watch_time || 0);
         row._totalVideoPlayActions = (row._totalVideoPlayActions || 0) + (metrics.video_play_actions || 0);
+        row._totalVideoContinuous2SecWatched = (row._totalVideoContinuous2SecWatched || 0) + (metrics.video_continuous_2_sec_watched || 0);
         // Sum conversion metrics
         row._totalConversions = (row._totalConversions || 0) + (metrics.total_conversions || 0);
         row._totalConversionValue = (row._totalConversionValue || 0) + (metrics.conversion_value || 0);
@@ -371,21 +378,24 @@ export async function getAdPerformanceBoard(params) {
         }
         // Count leads
         row.numberOfLeads = (row.numberOfLeads || 0) + 1;
-        // Count estimate sets
+        // Count individual statuses for estimate set categories
         if (lead.status === 'estimate_set') {
             row.numberOfEstimateSets = (row.numberOfEstimateSets || 0) + 1;
         }
-        // Count virtual quotes
         if (lead.status === 'virtual_quote') {
             row.numberOfVirtualQuotes = (row.numberOfVirtualQuotes || 0) + 1;
         }
-        // Count proposal presented
         if (lead.status === 'proposal_presented') {
             row.numberOfProposalPresented = (row.numberOfProposalPresented || 0) + 1;
         }
-        // Count jobs booked by status OR by amount (whichever indicates job was booked)
         if (lead.status === 'job_booked' || (lead.jobBookedAmount ?? 0) > 0) {
             row.numberOfJobsBooked = (row.numberOfJobsBooked || 0) + 1;
+        }
+        if (lead.status === 'estimate_canceled') {
+            row.numberOfEstimateCanceled = (row.numberOfEstimateCanceled || 0) + 1;
+        }
+        if (lead.status === 'job_lost') {
+            row.numberOfJobLost = (row.numberOfJobLost || 0) + 1;
         }
         // Track revenue separately
         if ((lead.jobBookedAmount ?? 0) > 0) {
@@ -394,14 +404,6 @@ export async function getAdPerformanceBoard(params) {
         // Count unqualified leads
         if (lead.status === 'unqualified') {
             row.numberOfUnqualifiedLeads = (row.numberOfUnqualifiedLeads || 0) + 1;
-        }
-        // Count estimate canceled
-        if (lead.status === 'estimate_canceled') {
-            row.numberOfEstimateCanceled = (row.numberOfEstimateCanceled || 0) + 1;
-        }
-        // Count job lost
-        if (lead.status === 'job_lost') {
-            row.numberOfJobLost = (row.numberOfJobLost || 0) + 1;
         }
     });
     // Step 8: Aggregate metrics from DB (use pre-calculated values from saveWeeklyAnalytics)
@@ -449,6 +451,7 @@ export async function getAdPerformanceBoard(params) {
         row.fb_video_views_100pct = row._totalVideoViews100 || 0;
         row.fb_video_avg_watch_time = row._totalVideoAvgWatchTime || 0;
         row.fb_video_play_actions = row._totalVideoPlayActions || 0;
+        row.fb_video_continuous_2_sec_watched = row._totalVideoContinuous2SecWatched || 0;
         // Conversion metrics (from DB)
         row.fb_total_conversions = row._totalConversions || 0;
         row.fb_conversion_value = row._totalConversionValue || 0;
@@ -459,18 +462,39 @@ export async function getAdPerformanceBoard(params) {
             : 0;
         // Lead cost metrics (calculate only lead-related costs, based on CRM leads)
         row.costPerLead = totalLeads > 0 ? Number((totalSpend / totalLeads).toFixed(2)) : null;
-        row.costPerEstimateSet = estimateSets > 0 ? Number((totalSpend / estimateSets).toFixed(2)) : null;
         row.costPerJobBooked = jobsBooked > 0 ? Number((totalSpend / jobsBooked).toFixed(2)) : null;
         row.costOfMarketingPercent = totalRevenue > 0 ? Number(((totalSpend / totalRevenue) * 100).toFixed(2)) : null;
-        // Additional metrics - estimateSetRate calculation
-        // netEstimates = estimateSets + virtualQuotes + proposalPresented + jobBooked
-        // netUnqualifieds = unqualified + estimateCanceled + jobLost
-        // estimateSetRate = netEstimates / (netEstimates + netUnqualifieds) * 100
-        const netEstimates = estimateSets + virtualQuotes + proposalPresented + jobsBooked;
-        const netUnqualifieds = unqualifiedLeads + estimateCanceled + jobLost;
-        const totalDecisionLeads = netEstimates + netUnqualifieds;
-        row.estimateSetRate = totalDecisionLeads > 0 ? Number(((netEstimates / totalDecisionLeads) * 100).toFixed(2)) : null;
+        // Calculate estimate set rate using centralized function
+        const netEstimates = calculateEstimateSetCount({
+            estimate_set: estimateSets,
+            virtual_quote: virtualQuotes,
+            proposal_presented: proposalPresented,
+            job_booked: jobsBooked,
+            estimate_canceled: estimateCanceled,
+            job_lost: jobLost
+        });
+        const netUnqualifieds = calculateUnqualifiedCount({
+            unqualified: unqualifiedLeads
+        });
+        row.costPerEstimateSet = netEstimates > 0 ? Number((totalSpend / netEstimates).toFixed(2)) : null;
+        row.estimateSetRate = calculateEstimateSetRate(netEstimates, netUnqualifieds);
         row.revenue = Number(totalRevenue.toFixed(2));
+        // Calculate engagement rate metrics
+        // Thumbstop Rate: (Video Play Actions / Impressions) * 100
+        const videoPlayActions = row._totalVideoPlayActions || 0;
+        row.thumbstop_rate = totalImpressions > 0 ? Number(((videoPlayActions / totalImpressions) * 100).toFixed(2)) : null;
+        // Conversion Rate: (FB Total Leads / Link Clicks) * 100
+        const fbLeads = row._totalLeads || 0;
+        const linkClicks = row._totalLinkClicks || 0;
+        row.conversion_rate = linkClicks > 0 ? Number(((fbLeads / linkClicks) * 100).toFixed(2)) : null;
+        // See More Rate: (See More Clicks / Impressions) * 100
+        // See More Clicks = All Clicks - Link Clicks - Post Reactions - Post Comments - Post Shares
+        const allClicks = totalClicks;
+        const postReactions = row._totalPostReactions || 0;
+        const postComments = row._totalPostComments || 0;
+        const postShares = row._totalPostShares || 0;
+        const seeMoreClicks = allClicks - linkClicks - postReactions - postComments - postShares;
+        row.see_more_rate = totalImpressions > 0 ? Number(((seeMoreClicks / totalImpressions) * 100).toFixed(2)) : null;
         // Convert service and zipCode sets to comma-separated strings
         row.service = row._services && row._services.size > 0 ? Array.from(row._services).sort().join(', ') : undefined;
         row.zipCode = row._zipCodes && row._zipCodes.size > 0 ? Array.from(row._zipCodes).sort().join(', ') : undefined;
@@ -490,9 +514,12 @@ export async function getAdPerformanceBoard(params) {
             filteredRow.service = row.service;
         if (columns.zipCode)
             filteredRow.zipCode = row.zipCode;
-        // Always include creative data when available (for ad-level grouping)
+        // Always include creative data and optimization goal when available (for ad-level grouping)
         if (row.creative) {
             filteredRow.creative = row.creative;
+        }
+        if (row.optimizationGoal) {
+            filteredRow.optimizationGoal = row.optimizationGoal;
         }
         // Basic metrics
         if (columns.fb_spend)
@@ -549,6 +576,8 @@ export async function getAdPerformanceBoard(params) {
             filteredRow.fb_video_avg_watch_time = row.fb_video_avg_watch_time;
         if (columns.fb_video_play_actions)
             filteredRow.fb_video_play_actions = row.fb_video_play_actions;
+        if (columns.fb_video_continuous_2_sec_watched)
+            filteredRow.fb_video_continuous_2_sec_watched = row.fb_video_continuous_2_sec_watched;
         // Conversion metrics
         if (columns.fb_total_conversions)
             filteredRow.fb_total_conversions = row.fb_total_conversions;
@@ -583,6 +612,13 @@ export async function getAdPerformanceBoard(params) {
             filteredRow.estimateSetRate = row.estimateSetRate;
         if (columns.revenue)
             filteredRow.revenue = row.revenue;
+        // Engagement rate metrics
+        if (columns.thumbstop_rate)
+            filteredRow.thumbstop_rate = row.thumbstop_rate;
+        if (columns.conversion_rate)
+            filteredRow.conversion_rate = row.conversion_rate;
+        if (columns.see_more_rate)
+            filteredRow.see_more_rate = row.see_more_rate;
         // Store internal fields for sorting
         filteredRow._totalSpend = row._totalSpend;
         results.push(filteredRow);
@@ -645,14 +681,30 @@ export async function getAdPerformanceBoard(params) {
         fb_cost_per_conversion: sumTotalConversions > 0 ? Number((sumSpend / sumTotalConversions).toFixed(2)) : 0,
         fb_cost_per_lead: sumTotalLeads > 0 ? Number((sumSpend / sumTotalLeads).toFixed(2)) : 0,
         costPerLead: sumNumberOfLeads > 0 ? Number((sumSpend / sumNumberOfLeads).toFixed(2)) : null,
-        costPerEstimateSet: sumEstimateSets > 0 ? Number((sumSpend / sumEstimateSets).toFixed(2)) : null,
         costPerJobBooked: sumJobsBooked > 0 ? Number((sumSpend / sumJobsBooked).toFixed(2)) : null,
         costOfMarketingPercent: sumRevenue > 0 ? Number(((sumSpend / sumRevenue) * 100).toFixed(2)) : null,
         estimateSetRate: (() => {
-            const totalNetEstimates = sumEstimateSets + sumVirtualQuotes + sumProposalPresented + sumJobsBooked;
-            const totalNetUnqualifieds = sumUnqualifiedLeads + sumEstimateCanceled + sumJobLost;
-            const totalDecisions = totalNetEstimates + totalNetUnqualifieds;
-            return totalDecisions > 0 ? Number(((totalNetEstimates / totalDecisions) * 100).toFixed(2)) : null;
+            const totalNetEstimates = calculateEstimateSetCount({
+                estimate_set: sumEstimateSets,
+                virtual_quote: sumVirtualQuotes,
+                proposal_presented: sumProposalPresented,
+                job_booked: sumJobsBooked,
+                estimate_canceled: sumEstimateCanceled,
+                job_lost: sumJobLost
+            });
+            const totalNetUnqualifieds = calculateUnqualifiedCount({ unqualified: sumUnqualifiedLeads });
+            return calculateEstimateSetRate(totalNetEstimates, totalNetUnqualifieds);
+        })(),
+        costPerEstimateSet: (() => {
+            const totalNetEstimates = calculateEstimateSetCount({
+                estimate_set: sumEstimateSets,
+                virtual_quote: sumVirtualQuotes,
+                proposal_presented: sumProposalPresented,
+                job_booked: sumJobsBooked,
+                estimate_canceled: sumEstimateCanceled,
+                job_lost: sumJobLost
+            });
+            return totalNetEstimates > 0 ? Number((sumSpend / totalNetEstimates).toFixed(2)) : null;
         })(),
     };
     return {

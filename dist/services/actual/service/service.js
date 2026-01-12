@@ -73,30 +73,61 @@ export class ActualService {
                 throw new Error('metaBudgetSpent must be a non-negative number');
             }
         }
-        const payload = {
-            userId,
-            startDate: week.weekStart,
-            endDate: week.weekEnd,
-            testingBudgetSpent: data.testingBudgetSpent ?? 0,
-            awarenessBrandingBudgetSpent: data.awarenessBrandingBudgetSpent ?? 0,
-            leadGenerationBudgetSpent: data.leadGenerationBudgetSpent ?? 0,
-            metaBudgetSpent: data.metaBudgetSpent !== undefined ? data.metaBudgetSpent : null,
-            revenue: data.revenue ?? 0,
-            sales: data.sales ?? 0,
-            leads: data.leads ?? 0,
-            estimatesRan: data.estimatesRan ?? 0,
-            estimatesSet: data.estimatesSet ?? 0,
-            adNamesAmount: data.adNamesAmount ?? [],
-        };
         const existing = await this.actualRepository.findActualByStartDate(userId, week.weekStart);
         let actual;
         if (existing) {
-            actual = await this.actualRepository.updateActual({
-                ...existing.toObject(),
-                ...payload,
+            // For updates: only include fields that are actually provided in data
+            // Preserve existing values for fields not sent from frontend
+            const existingData = existing.toObject();
+            const updatePayload = {
+                userId,
+                startDate: week.weekStart,
+                endDate: week.weekEnd,
+            };
+            // Fields that can be updated (excluding userId, startDate, endDate which are always set)
+            const updatableFields = [
+                'testingBudgetSpent',
+                'awarenessBrandingBudgetSpent',
+                'leadGenerationBudgetSpent',
+                'metaBudgetSpent',
+                'revenue',
+                'sales',
+                'leads',
+                'estimatesRan',
+                'estimatesSet',
+                'adNamesAmount',
+            ];
+            // Build payload: use provided values or preserve existing values
+            updatableFields.forEach((field) => {
+                if (data[field] !== undefined) {
+                    // Use provided value from frontend
+                    updatePayload[field] = data[field];
+                }
+                else {
+                    // Preserve existing value from database
+                    updatePayload[field] = existingData[field];
+                }
             });
+            // Update with complete payload (all fields included to preserve existing values)
+            actual = await this.actualRepository.updateActual(updatePayload);
         }
         else {
+            // For new records: use defaults for fields not provided
+            const payload = {
+                userId,
+                startDate: week.weekStart,
+                endDate: week.weekEnd,
+                testingBudgetSpent: data.testingBudgetSpent ?? 0,
+                awarenessBrandingBudgetSpent: data.awarenessBrandingBudgetSpent ?? 0,
+                leadGenerationBudgetSpent: data.leadGenerationBudgetSpent ?? 0,
+                metaBudgetSpent: data.metaBudgetSpent !== undefined ? data.metaBudgetSpent : null,
+                revenue: data.revenue ?? 0,
+                sales: data.sales ?? 0,
+                leads: data.leads ?? 0,
+                estimatesRan: data.estimatesRan ?? 0,
+                estimatesSet: data.estimatesSet ?? 0,
+                adNamesAmount: data.adNamesAmount ?? [],
+            };
             actual = await this.actualRepository.createActual(payload);
         }
         if (!actual)
