@@ -14,7 +14,7 @@ execution-logs/
 
 ## 📊 **What Gets Logged**
 
-Every weekly cron execution creates a detailed JSON file containing:
+Every weekly cron execution creates a detailed JSON file containing: 
 
 ### **Execution Metadata**
 - Execution ID and timestamp
