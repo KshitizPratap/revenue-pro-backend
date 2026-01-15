@@ -513,9 +513,23 @@ if (req.query.clientId) {
     // Always use phone/email uniqueness mode: match by clientId + (phone OR email)
     const result = await this.service.bulkCreateLeads(processedPayloads, true);
     
+    // Check if any important fields are missing from the processed payloads
+    const hasMissingFields = processedPayloads.some(payload => {
+      const phone = payload.phone?.trim() || '';
+      const email = payload.email?.trim() || '';
+      const service = payload.service?.trim() || '';
+      const zip = payload.zip?.trim() || '';
+      
+      return !phone || !email || !service || !zip;
+    });
+
+    const responseMessage = hasMissingFields 
+      ? `Successfully processed ${result.stats.total} lead(s). Note: Some leads were saved with missing contact or service information.`
+      : `Successfully processed ${result.stats.total} lead(s)`;
+    
     utils.sendSuccessResponse(res, 200, {
       success: true,
-      message: `Successfully processed ${result.stats.total} lead(s)`,
+      message: responseMessage,
       data: {
         total: result.stats.total,
         newInserts: result.stats.newInserts,
