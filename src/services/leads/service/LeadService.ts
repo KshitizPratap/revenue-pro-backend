@@ -325,12 +325,18 @@ export class LeadService {
    */
   async bulkCreateLeads(
     payloads: ILead[], 
-    uniquenessByPhoneEmail: boolean = false
+    uniquenessByPhoneEmail: boolean = false,
+    entrySource?: 'manual' | 'system'
   ): Promise<BulkCreateResult> {
     if (payloads.length === 0) return { 
       documents: [], 
       stats: { total: 0, newInserts: 0, duplicatesUpdated: 0 }
     };
+
+    // Apply entrySource to all payloads if provided
+    if (entrySource) {
+      payloads = payloads.map(lead => ({ ...lead, entrySource }));
+    }
 
 
     // Build operations based on uniqueness flag
@@ -361,10 +367,19 @@ export class LeadService {
         filter._id = new Date().getTime() + Math.random() + Math.random();
       }
 
+      // Separate entrySource to only set on insert, not update
+      const { entrySource, ...leadWithoutEntrySource } = lead;
+      const updateOperation: any = { $set: leadWithoutEntrySource };
+      
+      // Only set entrySource on new document creation
+      if (entrySource) {
+        updateOperation.$setOnInsert = { entrySource };
+      }
+
       return {
         updateOne: {
           filter,
-          update: { $set: lead },
+          update: updateOperation,
           upsert: true
         }
       };

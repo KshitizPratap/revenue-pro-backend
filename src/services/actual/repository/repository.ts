@@ -190,7 +190,7 @@ export class ActualRepository {
                 cond: {
                   $in: [
                     "$$lead.status",
-                    ["estimate_set", "virtual_quote", "proposal_presented", "job_booked"]
+                    ["estimate_set", "virtual_quote", "proposal_presented", "job_booked", "estimate_canceled", "job_lost", "estimate_rescheduled"]
                   ]
                 },
               },
@@ -204,7 +204,7 @@ export class ActualRepository {
                 cond: {
                   $in: [
                     "$$lead.status",
-                    ["unqualified", "estimate_canceled", "job_lost"]
+                    ["unqualified"]
                   ]
                 },
               },

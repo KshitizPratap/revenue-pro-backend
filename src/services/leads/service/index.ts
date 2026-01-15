@@ -40,8 +40,8 @@ export class CombinedLeadService {
   async findAndUpdateLeadByEmail(params: any) {
     return this.leadService.findAndUpdateLeadByEmail(params);
   }
-  async bulkCreateLeads(payloads: any[], uniquenessByPhoneEmail?: boolean) { 
-    return this.leadService.bulkCreateLeads(payloads, uniquenessByPhoneEmail); 
+  async bulkCreateLeads(payloads: any[], uniquenessByPhoneEmail?: boolean, entrySource?: 'manual' | 'system') { 
+    return this.leadService.bulkCreateLeads(payloads, uniquenessByPhoneEmail, entrySource); 
   }
   async getLeadsPaginated(clientId?: string, startDate?: string, endDate?: string, pagination?: any, filters?: any) { 
     return this.leadService.getLeadsPaginated(clientId, startDate, endDate, pagination, filters); 

@@ -137,6 +137,7 @@ if (req.query.clientId) {
     this.hubspotSubscription = this.hubspotSubscription.bind(this);
     this.updateLeadByEmail = this.updateLeadByEmail.bind(this);
     this.syncClientActivity = this.syncClientActivity.bind(this);
+    this.upsertLeadByContact = this.upsertLeadByContact.bind(this);
   }
 
   /**
@@ -436,6 +437,130 @@ if (req.query.clientId) {
     utils.sendErrorResponse(res, error);
   }
 }
+
+  /**
+   * Upsert lead(s) by phone/email + clientId
+   * POST /hooks/upsert-lead
+   * If lead exists (matched by clientId + (phone OR email)), update it
+   * If lead doesn't exist, create new lead
+   */
+  async upsertLeadByContact(req: Request, res: Response): Promise<void> {
+    try {
+      const leadsPayload = Array.isArray(req.body) ? req.body : [req.body];
+      const processedPayloads = [];
+
+      for (const rawPayload of leadsPayload) {
+        // Validate required fields
+        if (!rawPayload.clientId) {
+          utils.sendErrorResponse(res, {
+            message: "clientId is required",
+            statusCode: 400
+          });
+          return;
+        }
+
+        // Ensure at least email or phone is provided
+        if (!rawPayload.email && !rawPayload.phone) {
+          utils.sendErrorResponse(res, {
+            message: "At least one of email or phone is required for upsert",
+            statusCode: 400
+          });
+          return;
+        }
+
+        // Parse and convert leadDate from CST to UTC before sanitization
+        if (rawPayload.leadDate) {
+          const parsedDate = utils.parseDate(rawPayload.leadDate);
+          if (!parsedDate) {
+            utils.sendErrorResponse(
+              res,
+              `Invalid leadDate format: ${rawPayload.leadDate}. Expected formats: YYYY-MM-DD, MM/DD/YYYY, etc.`
+            );
+            return;
+          }
+          rawPayload.leadDate = parsedDate; // Now contains UTC ISO string
+        }
+        
+        const payload = sanitizeLeadData(rawPayload);
+
+        // Default status
+        if (!payload.status) {
+          payload.status = "new";
+        }
+
+        payload.isDeleted = false;
+        payload.deletedAt = null;
+
+        // Validate status
+        if (![
+          "new", "in_progress", "estimate_set", "virtual_quote", 
+          "estimate_canceled", "proposal_presented", "job_booked", 
+          "job_lost", "estimate_rescheduled", "unqualified"
+        ].includes(payload.status)) {
+          utils.sendErrorResponse(
+            res,
+            `Invalid status '${payload.status}'. Must be one of: new, in_progress, estimate_set, virtual_quote, estimate_canceled, proposal_presented, job_booked, job_lost, estimate_rescheduled, unqualified`
+          );
+          return;
+        }
+
+        // Clear unqualifiedLeadReason if not unqualified
+        if (payload.status !== "unqualified") {
+          payload.unqualifiedLeadReason = "";
+        }
+
+        processedPayloads.push(payload);
+      }
+
+      // Use existing bulkCreateLeads function with uniquenessByPhoneEmail flag
+      // Pass 'manual' as entrySource to mark new leads from this API
+      const result = await this.service.bulkCreateLeads(processedPayloads, true, 'manual');
+
+      // Automatically update conversion rates and lead scores for the client
+      const clientId = processedPayloads[0].clientId;
+      let conversionRatesUpdated = 0;
+      let leadScoresUpdated = 0;
+
+      try {
+        // Get all leads for the client to compute conversion rates
+        const allClientLeads = await this.service.getAllLeadsForClient(clientId);
+        
+        // Compute conversion rates for the client
+        const conversionData = await this.service.computeConversionRatesForClient(allClientLeads, clientId);
+        
+        // Save conversion rates to database
+        if (conversionData && conversionData.length > 0) {
+          await conversionRateRepository.batchUpsertConversionRates(conversionData);
+          conversionRatesUpdated = conversionData.length;
+
+          // Recalculate lead scores after updating conversion rates
+          const scoreResult = await this.service.recalculateAllLeadScores(clientId);
+          leadScoresUpdated = scoreResult.updatedLeads;
+          console.log(`Updated ${leadScoresUpdated} lead scores for client ${clientId}`);
+        }
+      } catch (scoreError: any) {
+        console.error(`Error updating conversion rates/lead scores:`, scoreError);
+        // Don't fail the request, just log the error
+      }
+
+      utils.sendSuccessResponse(res, 200, {
+        success: true,
+        message: `Successfully processed ${result.stats.total} lead(s)`,
+        data: {
+          leads: {
+            total: result.stats.total,
+            newInserts: result.stats.newInserts,
+            duplicatesUpdated: result.stats.duplicatesUpdated
+          },
+          conversionRatesUpdated,
+          leadScoresUpdated
+        }
+      });
+    } catch (error) {
+      console.error("Error in upsertLeadByContact:", error);
+      utils.sendErrorResponse(res, error);
+    }
+  }
 
   async createLead(req: Request, res: Response): Promise<void> {
   try {
