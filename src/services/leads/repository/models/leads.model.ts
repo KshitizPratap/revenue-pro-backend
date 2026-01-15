@@ -42,6 +42,12 @@ const leadSchema = new Schema<ILeadDocument>(
       default: {},
       required: false // stores per-lead conversion rates for service, adSetName, adName, leadDate, zip
     },
+    entrySource: { 
+      type: String, 
+      enum: ['manual', 'system'], 
+      default: 'system',
+      required: false 
+    },
     lastManualUpdate: { type: Date, default: null },
     isDeleted: { type: Boolean, default: false },
     deletedAt: { type: Date, default: null },

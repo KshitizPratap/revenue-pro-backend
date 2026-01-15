@@ -42,6 +42,7 @@ export interface ILead {
     zip?: number;
     [key: string]: number | undefined;
   };
+  entrySource?: 'manual' | 'system'; // Source of lead entry - manual (via API) or system (automated)
   lastManualUpdate?: Date | null;
   isDeleted?: boolean;
   deletedAt?: Date | null;

@@ -439,10 +439,29 @@ if (req.query.clientId) {
 
   async createLead(req: Request, res: Response): Promise<void> {
   try {
+    // Check for entrySource query parameter (manual or system, defaults to system)
+    const entrySource = req.query.entrySource === 'manual' ? 'manual' : 'system';
+    
     const leadsPayload = Array.isArray(req.body) ? req.body : [req.body];
-    const processedLeads = [];
+    const processedPayloads = [];
 
     for (const rawPayload of leadsPayload) {
+      // Validate required fields
+      if (!rawPayload.clientId) {
+        utils.sendErrorResponse(res, {
+          message: "clientId is required",
+          statusCode: 400
+        });
+        return;
+      }
+      if (!rawPayload.email && !rawPayload.phone) {
+        utils.sendErrorResponse(res, {
+          message: "At least one of email or phone is required",
+          statusCode: 400
+        });
+        return;
+      }
+
       // Parse and convert leadDate from CST to UTC before sanitization
       if (rawPayload.leadDate) {
         const parsedDate = utils.parseDate(rawPayload.leadDate);
@@ -480,23 +499,20 @@ if (req.query.clientId) {
         payload.unqualifiedLeadReason = "";
       }
 
-      // 🔑 Strict uniqueness filter
-      const query = {
-        clientId: payload.clientId,
-        email: payload.email,
-        phone: payload.phone,
-        service: payload.service,
-        zip: payload.zip,
-      };
-
-
-      const lead = await this.service.upsertLead(query, payload);
-      processedLeads.push(lead);
+      processedPayloads.push(payload);
     }
 
-    utils.sendSuccessResponse(res, 201, {
+    // Always use phone/email uniqueness mode: match by clientId + (phone OR email)
+    const result = await this.service.bulkCreateLeads(processedPayloads, true, entrySource);
+    
+    utils.sendSuccessResponse(res, 200, {
       success: true,
-      data: processedLeads.length === 1 ? processedLeads[0] : processedLeads,
+      message: `Successfully processed ${result.stats.total} lead(s)`,
+      data: {
+        total: result.stats.total,
+        newInserts: result.stats.newInserts,
+        duplicatesUpdated: result.stats.duplicatesUpdated
+      }
     });
   } catch (error) {
     console.error("Error in createLead:", error);
