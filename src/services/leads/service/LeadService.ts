@@ -325,22 +325,23 @@ export class LeadService {
    */
   async bulkCreateLeads(
     payloads: ILead[], 
-    uniquenessByPhoneEmail: boolean = false,
-    entrySource?: 'manual' | 'system'
+    uniquenessByPhoneEmail: boolean = false
   ): Promise<BulkCreateResult> {
     if (payloads.length === 0) return { 
       documents: [], 
       stats: { total: 0, newInserts: 0, duplicatesUpdated: 0 }
     };
 
-    // Apply entrySource to all payloads if provided
-    if (entrySource) {
-      payloads = payloads.map(lead => ({ ...lead, entrySource }));
-    }
+    // Each lead can have its own entrySource in the payload
+    // Default to 'system' if not specified, null, or undefined
+    const processedPayloads = payloads.map(lead => ({
+      ...lead,
+      entrySource: lead.entrySource || 'system'
+    }));
 
 
     // Build operations based on uniqueness flag
-    const bulkOps = payloads.map(lead => {
+    const bulkOps = processedPayloads.map(lead => {
       const filter: any = { clientId: lead.clientId };
       
       // Apply email/phone uniqueness logic if enabled

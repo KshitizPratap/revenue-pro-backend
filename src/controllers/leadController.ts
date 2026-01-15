@@ -439,9 +439,6 @@ if (req.query.clientId) {
 
   async createLead(req: Request, res: Response): Promise<void> {
   try {
-    // Check for entrySource query parameter (manual or system, defaults to system)
-    const entrySource = req.query.entrySource === 'manual' ? 'manual' : 'system';
-    
     const leadsPayload = Array.isArray(req.body) ? req.body : [req.body];
     const processedPayloads = [];
 
@@ -499,15 +496,43 @@ if (req.query.clientId) {
         payload.unqualifiedLeadReason = "";
       }
 
+      // Handle entrySource: null or undefined means 'system' (automatic)
+      if (payload.entrySource === null || payload.entrySource === undefined) {
+        payload.entrySource = 'system';
+      } else if (!['manual', 'system'].includes(payload.entrySource)) {
+        utils.sendErrorResponse(
+          res,
+          `Invalid entrySource '${payload.entrySource}'. Must be either 'manual' or 'system'`
+        );
+        return;
+      }
+
       processedPayloads.push(payload);
     }
 
     // Always use phone/email uniqueness mode: match by clientId + (phone OR email)
-    const result = await this.service.bulkCreateLeads(processedPayloads, true, entrySource);
+    const result = await this.service.bulkCreateLeads(processedPayloads, true);
+    
+    // Check if any important fields are missing from the processed payloads
+    const hasMissingFields = processedPayloads.some(payload => {
+      const phone = payload.phone?.trim() || '';
+      const email = payload.email?.trim() || '';
+      const service = payload.service?.trim() || '';
+      const zip = payload.zip?.trim() || '';
+      const name = payload.name?.trim() || '';
+      const adSetName = payload.adSetName?.trim() || '';
+      const adName = payload.adName?.trim() || '';
+      
+      return !phone || !email || !service || !zip || !name || !adSetName || !adName;
+    });
+
+    const responseMessage = hasMissingFields 
+      ? `Successfully processed ${result.stats.total} lead(s). Note: Some leads were processed with missing attributes such as name, phone, email, service, adSetName, or adName.`
+      : `Successfully processed ${result.stats.total} lead(s)`;
     
     utils.sendSuccessResponse(res, 200, {
       success: true,
-      message: `Successfully processed ${result.stats.total} lead(s)`,
+      message: responseMessage,
       data: {
         total: result.stats.total,
         newInserts: result.stats.newInserts,
