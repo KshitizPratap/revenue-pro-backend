@@ -51,7 +51,7 @@ export interface ICreative {
   } | null;
   
   // Creative Type
-  creativeType: 'image' | 'video' | 'carousel' | 'link' | 'other';
+  creativeType: 'image' | 'video' | 'carousel' | 'dynamic';
   
   // Object Story Spec (Facebook's creative structure)
   objectStorySpec: any;

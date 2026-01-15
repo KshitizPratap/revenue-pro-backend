@@ -12,6 +12,7 @@ export class CreativesController {
     this.fetchAndSaveCreatives = this.fetchAndSaveCreatives.bind(this);
     this.getCreative = this.getCreative.bind(this);
     this.getCreativesByAccount = this.getCreativesByAccount.bind(this);
+    this.refreshCreative = this.refreshCreative.bind(this);
   }
 
   /**
@@ -62,16 +63,15 @@ export class CreativesController {
         return;
       }
 
-      // Get Meta access token from hardcoded client
-      const metaTokenClientId = '68ac6ebce46631727500499b';
+      // Use the same hardcoded Meta token owner as enriched-ads
+      const metaTokenClientId = config.META_USER_TOKEN_ID;
       const metaTokenUser = await this.userService.getUserById(metaTokenClientId);
+      const accessToken = (metaTokenUser as any)?.metaAccessToken as string | undefined;
 
-
-      const accessToken = (metaTokenUser as any).metaAccessToken as string | undefined;
       if (!accessToken) {
         res.status(500).json({
           success: false,
-          error: 'Meta access token not configured',
+          error: 'Meta access token not configured for creatives fetch',
         });
         return;
       }
@@ -148,17 +148,15 @@ export class CreativesController {
         return;
       }
 
-      // Get Meta token owner for access token
-      // Get Meta access token from hardcoded client
-      const metaTokenClientId = '68ac6ebce46631727500499b';
+      // Use the same hardcoded Meta token owner as enriched-ads
+      const metaTokenClientId = config.META_USER_TOKEN_ID;
       const metaTokenUser = await this.userService.getUserById(metaTokenClientId);
+      const accessToken = (metaTokenUser as any)?.metaAccessToken as string | undefined;
 
-
-      const accessToken = (metaTokenUser as any).metaAccessToken as string | undefined;
       if (!accessToken) {
         res.status(500).json({
           success: false,
-          error: 'Meta access token not configured',
+          error: 'Meta access token not configured for creative fetch',
         });
         return;
       }
@@ -249,6 +247,97 @@ export class CreativesController {
       res.status(500).json({
         success: false,
         error: error.message || 'Failed to get creatives',
+      });
+    }
+  }
+
+  /**
+   * Refresh a creative by fetching latest data from Facebook
+   * Useful when image URLs expire or break in the frontend
+   * POST /api/v1/creatives/:creativeId/refresh?clientId=XXX
+   */
+  async refreshCreative(req: Request, res: Response): Promise<void> {
+    try {
+      const creativeId = req.params.creativeId as string;
+      const clientId = req.query.clientId as string;
+
+      if (!creativeId) {
+        res.status(400).json({
+          success: false,
+          error: 'creativeId is required',
+        });
+        return;
+      }
+
+      if (!clientId) {
+        res.status(400).json({
+          success: false,
+          error: 'clientId is required',
+        });
+        return;
+      }
+
+      console.log(`[CreativesController] Refreshing creative ${creativeId} for client ${clientId}`);
+
+      // Get client user to resolve fbAdAccountId
+      const clientUser = await this.userService.getUserById(clientId);
+      if (!clientUser) {
+        res.status(404).json({
+          success: false,
+          error: 'Client user not found',
+        });
+        return;
+      }
+
+      const fbAdAccountId = (clientUser as any).fbAdAccountId as string | undefined;
+      if (!fbAdAccountId) {
+        res.status(400).json({
+          success: false,
+          error: 'Client does not have a configured Facebook Ad Account ID',
+        });
+        return;
+      }
+
+      // Use the same hardcoded Meta token owner
+      const metaTokenClientId = config.META_USER_TOKEN_ID;
+      const metaTokenUser = await this.userService.getUserById(metaTokenClientId);
+      const accessToken = (metaTokenUser as any)?.metaAccessToken as string | undefined;
+
+      if (!accessToken) {
+        res.status(500).json({
+          success: false,
+          error: 'Meta access token not configured for creative refresh',
+        });
+        return;
+      }
+
+      // Force refresh from Facebook (bypass cache)
+      const creative = await creativesService.refreshCreativeUrls(
+        creativeId,
+        fbAdAccountId,
+        accessToken
+      );
+
+      if (!creative) {
+        res.status(404).json({
+          success: false,
+          error: 'Creative not found or failed to fetch from Facebook',
+        });
+        return;
+      }
+
+      console.log(`[CreativesController] Successfully refreshed creative ${creativeId}`);
+
+      res.status(200).json({
+        success: true,
+        message: 'Creative refreshed successfully',
+        data: creative,
+      });
+    } catch (error: any) {
+      console.error('[CreativesController] Error refreshing creative:', error);
+      res.status(500).json({
+        success: false,
+        error: error.message || 'Failed to refresh creative',
       });
     }
   }

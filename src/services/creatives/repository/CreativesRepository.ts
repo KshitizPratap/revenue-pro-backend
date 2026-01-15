@@ -56,6 +56,18 @@ export class CreativesRepository {
   }
 
   /**
+   * Update specific fields of a creative (for lightweight URL refreshes)
+   */
+  async updateCreative(creativeId: string, updates: Partial<ICreative>): Promise<ICreative | null> {
+    const updated = await CreativeModel.findOneAndUpdate(
+      { creativeId, isDeleted: false },
+      { $set: updates },
+      { new: true }
+    );
+    return updated ? updated.toObject() : null;
+  }
+
+  /**
    * Save or update multiple creatives
    */
   async upsertCreatives(creativesData: Partial<ICreative>[]): Promise<number> {
