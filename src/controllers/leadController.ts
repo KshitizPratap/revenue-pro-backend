@@ -519,12 +519,15 @@ if (req.query.clientId) {
       const email = payload.email?.trim() || '';
       const service = payload.service?.trim() || '';
       const zip = payload.zip?.trim() || '';
+      const name = payload.name?.trim() || '';
+      const adSetName = payload.adSetName?.trim() || '';
+      const adName = payload.adName?.trim() || '';
       
-      return !phone || !email || !service || !zip;
+      return !phone || !email || !service || !zip || !name || !adSetName || !adName;
     });
 
     const responseMessage = hasMissingFields 
-      ? `Successfully processed ${result.stats.total} lead(s). Note: Some leads were saved with missing contact or service information.`
+      ? `Successfully processed ${result.stats.total} lead(s). Note: Some leads were processed with missing attributes such as name, phone, email, service, adSetName, or adName.`
       : `Successfully processed ${result.stats.total} lead(s)`;
     
     utils.sendSuccessResponse(res, 200, {
