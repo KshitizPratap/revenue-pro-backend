@@ -439,9 +439,6 @@ if (req.query.clientId) {
 
   async createLead(req: Request, res: Response): Promise<void> {
   try {
-    // Check for entrySource query parameter (manual or system, defaults to system)
-    const entrySource = req.query.entrySource === 'manual' ? 'manual' : 'system';
-    
     const leadsPayload = Array.isArray(req.body) ? req.body : [req.body];
     const processedPayloads = [];
 
@@ -499,11 +496,22 @@ if (req.query.clientId) {
         payload.unqualifiedLeadReason = "";
       }
 
+      // Handle entrySource: null or undefined means 'system' (automatic)
+      if (payload.entrySource === null || payload.entrySource === undefined) {
+        payload.entrySource = 'system';
+      } else if (!['manual', 'system'].includes(payload.entrySource)) {
+        utils.sendErrorResponse(
+          res,
+          `Invalid entrySource '${payload.entrySource}'. Must be either 'manual' or 'system'`
+        );
+        return;
+      }
+
       processedPayloads.push(payload);
     }
 
     // Always use phone/email uniqueness mode: match by clientId + (phone OR email)
-    const result = await this.service.bulkCreateLeads(processedPayloads, true, entrySource);
+    const result = await this.service.bulkCreateLeads(processedPayloads, true);
     
     utils.sendSuccessResponse(res, 200, {
       success: true,
