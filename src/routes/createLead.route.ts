@@ -10,8 +10,5 @@ router.post("/hooks/create-lead", verifyApiKey, controller.createLead);
 router.post('/trigger-leads-computation',verifyApiKey, controller.processLeadScoresAndCRs);
 router.patch('/hook/update-lead', verifyApiKey, controller.updateLeadByEmail);
 
-// New route: Upsert lead by phone/email + clientId (create if not exists, update if exists)
-router.post('/hooks/upsert-lead', verifyApiKey, controller.upsertLeadByContact);
-
 export default router
 
