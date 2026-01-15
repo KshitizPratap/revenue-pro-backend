@@ -64,8 +64,8 @@ const creativesSchema = new Schema<ICreativeDocument>(
     // Creative Type
     creativeType: { 
       type: String, 
-      enum: ['image', 'video', 'carousel', 'link', 'other'],
-      default: 'other'
+      enum: ['image', 'video', 'carousel', 'dynamic'],
+      default: 'dynamic'
     },
     
     // Object Story Spec (Facebook's creative structure)

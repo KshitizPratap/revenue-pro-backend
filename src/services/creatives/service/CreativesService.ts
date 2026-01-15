@@ -289,15 +289,18 @@ export class CreativesService {
     // Determine creative type based on new logic
     let creativeType: 'image' | 'video' | 'carousel' | 'dynamic' = 'dynamic';
     
-    if (topLevelVideoId) {
-      // Priority 1: Video (if top-level video_id exists)
+    // Check if video exists - either top-level OR in object_story_spec.video_data
+    const hasVideo = !!(topLevelVideoId || videoId);
+    
+    if (hasVideo) {
+      // Priority 1: Video (if video_id exists at any level - top-level or object_story_spec)
       creativeType = 'video';
-      console.log(`[Creatives] Type: VIDEO (top-level video_id: ${topLevelVideoId}, fetching from: ${videoId})`);
-    } else if (imageUrl && !topLevelVideoId) {
+      console.log(`[Creatives] Type: VIDEO (top-level video_id: ${topLevelVideoId || 'none'}, object_story_spec video_id: ${videoId || 'none'})`);
+    } else if (imageUrl) {
       // Priority 2: Image (if image_url exists and no video_id)
       creativeType = 'image';
       console.log(`[Creatives] Type: IMAGE (image_url: ${imageUrl})`);
-    } else if (!imageUrl && !videoId && hasCarouselImages) {
+    } else if (!imageUrl && hasCarouselImages) {
       // Priority 3: Carousel (no image_url, no video_id, but has image hashes in child_attachments)
       creativeType = 'carousel';
       console.log(`[Creatives] Type: CAROUSEL (${childAttachments.length} items)`);
