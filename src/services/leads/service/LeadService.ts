@@ -84,29 +84,20 @@ export class LeadService {
   // ============= BASIC CRUD OPERATIONS =============
 
   /**
-   * Helper method to update statusHistory (Option C: unique statuses with latest timestamp)
-   * Updates existing entry if status already exists, otherwise adds new entry
+   * Helper method to update statusHistory (Immutable Event Pattern)
+   * Always adds a new entry to track every status transition as an immutable event
+   * Allows multiple entries for the same status (e.g., multiple estimate_set events)
    */
   private updateStatusHistory(existing: ILeadDocument, newStatus: string): void {
     if (!existing.statusHistory) {
       existing.statusHistory = [];
     }
 
-    const now = new Date();
-    const existingEntryIndex = existing.statusHistory.findIndex(
-      entry => entry.status === newStatus
-    );
-
-    if (existingEntryIndex >= 0) {
-      // Update existing entry with latest timestamp
-      existing.statusHistory[existingEntryIndex].timestamp = now;
-    } else {
-      // Add new status entry
-      existing.statusHistory.push({
-        status: newStatus as any,
-        timestamp: now
-      });
-    }
+    // Always add new status entry - record every transition as an immutable event
+    existing.statusHistory.push({
+      status: newStatus as any,
+      timestamp: new Date()
+    });
   }
 
   /**
@@ -183,8 +174,10 @@ export class LeadService {
     const existing = await this.leadRepo.getLeadById(id);
     if (!existing) throw new Error("Lead not found");
 
-    const oldStatus = existing.status;
     let statusChanged = false;
+    const updatePayload: any = {
+      lastManualUpdate: new Date()
+    };
 
     // Handle status change
     if (data.status && data.status !== existing.status) {
@@ -192,62 +185,67 @@ export class LeadService {
       // Update statusHistory before changing status
       this.updateStatusHistory(existing, data.status);
 
-      existing.status = data.status;
+      updatePayload.status = data.status;
+      updatePayload.statusHistory = existing.statusHistory;
 
       // Clear unqualifiedLeadReason if status is not "unqualified"
       if (data.status !== 'unqualified') {
-        existing.unqualifiedLeadReason = '';
+        updatePayload.unqualifiedLeadReason = '';
       }
 
       // Reset amounts if new status doesn't allow them
       if (!this.allowsProposalAmount(data.status)) {
-        existing.proposalAmount = 0;
+        updatePayload.proposalAmount = 0;
       }
       if (!this.allowsJobBookedAmount(data.status)) {
-        existing.jobBookedAmount = 0;
+        updatePayload.jobBookedAmount = 0;
       }
     }
 
     if (data.unqualifiedLeadReason) {
-      existing.unqualifiedLeadReason = data.unqualifiedLeadReason;
+      updatePayload.unqualifiedLeadReason = data.unqualifiedLeadReason;
     }
 
     // Handle notes field - can be updated regardless of status
     if (data.notes !== undefined) {
-      existing.notes = data.notes.trim();
+      updatePayload.notes = data.notes.trim();
     }
 
     // Handle proposalAmount - allowed for: estimate_set, virtual_quote, proposal_presented, job_lost
     if (data.proposalAmount !== undefined) {
-      if (this.allowsProposalAmount(existing.status)) {
+      const currentStatus = updatePayload.status || existing.status;
+      if (this.allowsProposalAmount(currentStatus)) {
         const parsedProposal = Number(data.proposalAmount);
-        existing.proposalAmount = isFinite(parsedProposal) && parsedProposal >= 0 ? parsedProposal : 0;
+        updatePayload.proposalAmount = isFinite(parsedProposal) && parsedProposal >= 0 ? parsedProposal : 0;
       } else {
-        throw new Error(`proposalAmount can only be set when status is one of: estimate_set, virtual_quote, proposal_presented, job_lost. Current status: ${existing.status}`);
+        throw new Error(`proposalAmount can only be set when status is one of: estimate_set, virtual_quote, proposal_presented, job_lost. Current status: ${currentStatus}`);
       }
     }
 
     // Handle jobBookedAmount - allowed only for: job_booked
     if (data.jobBookedAmount !== undefined) {
-      if (this.allowsJobBookedAmount(existing.status)) {
+      const currentStatus = updatePayload.status || existing.status;
+      if (this.allowsJobBookedAmount(currentStatus)) {
         const parsedBooked = Number(data.jobBookedAmount);
-        existing.jobBookedAmount = isFinite(parsedBooked) && parsedBooked >= 0 ? parsedBooked : 0;
+        updatePayload.jobBookedAmount = isFinite(parsedBooked) && parsedBooked >= 0 ? parsedBooked : 0;
       } else {
-        throw new Error(`jobBookedAmount can only be set when status is 'job_booked'. Current status: ${existing.status}`);
+        throw new Error(`jobBookedAmount can only be set when status is 'job_booked'. Current status: ${currentStatus}`);
       }
     }
 
-    // Set lastManualUpdate timestamp for manual operations
-    existing.lastManualUpdate = new Date();
+    // Perform the update
+    await existing.updateOne({ $set: updatePayload });
 
-    await existing.save();
+    // Refresh the document to get updated values
+    const updated = await this.leadRepo.getLeadById(id);
+    if (!updated) throw new Error("Failed to retrieve updated lead");
 
     // Send Facebook Conversion API event if status changed to job_booked
     if (statusChanged && data.status) {
-      await this.sendFacebookConversionEvent(existing, data.status);
+      await this.sendFacebookConversionEvent(updated, data.status);
     }
 
-    return existing;
+    return updated;
   }
 
   /**
