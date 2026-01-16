@@ -4,6 +4,7 @@ import { SheetsService } from "../services/leads/service/sheets.service.js";
 import utils from "../utils/utils.js";
 import { conversionRateRepository } from "../services/leads/repository/index.js";
 import { sanitizeLeadData } from "../services/leads/utils/leads.util.js";
+import { VALID_LEAD_STATUSES } from "../services/leads/domain/leads.domain.js";
 import mongoose from "mongoose";
 
 export class LeadController {
@@ -156,10 +157,9 @@ if (req.query.clientId) {
     }
 
     // Validate status
-    const validStatuses = ["new", "in_progress", "estimate_set", "virtual_quote", "estimate_canceled", "proposal_presented", "job_booked", "job_lost", "estimate_rescheduled", "unqualified"];
-    if (!validStatuses.includes(status)) {
+    if (!VALID_LEAD_STATUSES.includes(status as any)) {
       utils.sendErrorResponse(res, {
-        message: `Invalid status. Must be one of: ${validStatuses.join(", ")}`,
+        message: `Invalid status. Must be one of: ${VALID_LEAD_STATUSES.join(", ")}`,
         statusCode: 400
       });
       return;
@@ -441,38 +441,60 @@ if (req.query.clientId) {
   try {
     const leadsPayload = Array.isArray(req.body) ? req.body : [req.body];
     const processedPayloads = [];
+    const validationErrors: Array<{ index: number; error: string }> = [];
+    const missingFieldsTracker: Array<{ missingFields: string[] }> = [];
 
-    for (const rawPayload of leadsPayload) {
-      // Validate required fields
+    for (let i = 0; i < leadsPayload.length; i++) {
+      const rawPayload = leadsPayload[i];
+      
+      // Validate clientId (mandatory)
       if (!rawPayload.clientId) {
-        utils.sendErrorResponse(res, {
-          message: "clientId is required",
-          statusCode: 400
+        validationErrors.push({
+          index: i,
+          error: "clientId is required"
         });
-        return;
+        continue;
       }
-      if (!rawPayload.email && !rawPayload.phone) {
-        utils.sendErrorResponse(res, {
-          message: "At least one of email or phone is required",
-          statusCode: 400
+
+      // Check if email/phone present OR zip present
+      const hasEmail = rawPayload.email && rawPayload.email.trim() !== '';
+      const hasPhone = rawPayload.phone && rawPayload.phone.trim() !== '';
+      const hasZip = rawPayload.zip && rawPayload.zip.trim() !== '';
+      
+      // If no email/phone, zip is required
+      if (!hasEmail && !hasPhone && !hasZip) {
+        validationErrors.push({
+          index: i,
+          error: "At least one of email, phone, or zip is required"
         });
-        return;
+        continue;
       }
 
       // Parse and convert leadDate from CST to UTC before sanitization
       if (rawPayload.leadDate) {
         const parsedDate = utils.parseDate(rawPayload.leadDate);
         if (!parsedDate) {
-          utils.sendErrorResponse(
-            res,
-            `Invalid leadDate format: ${rawPayload.leadDate}. Expected formats: YYYY-MM-DD, MM/DD/YYYY, etc.`
-          );
-          return;
+          validationErrors.push({
+            index: i,
+            error: `Invalid leadDate format: ${rawPayload.leadDate}. Expected formats: YYYY-MM-DD, MM/DD/YYYY, etc.`
+          });
+          continue;
         }
         rawPayload.leadDate = parsedDate; // Now contains UTC ISO string
       }
       
       const payload = sanitizeLeadData(rawPayload);
+
+      // Track missing optional fields
+      const missingFields: string[] = [];
+      if (!payload.name || payload.name.trim() === '') missingFields.push('name');
+      if (!payload.email || payload.email.trim() === '') missingFields.push('email');
+      if (!payload.phone || payload.phone.trim() === '') missingFields.push('phone');
+      if (!payload.zip || payload.zip.trim() === '') missingFields.push('zip');
+      if (!payload.service || payload.service.trim() === '') missingFields.push('service');
+      if (!payload.adSetName || payload.adSetName.trim() === '') missingFields.push('adSetName');
+      if (!payload.adName || payload.adName.trim() === '') missingFields.push('adName');
+      missingFieldsTracker.push({ missingFields });
 
       // Default status
       if (!payload.status) {
@@ -483,12 +505,12 @@ if (req.query.clientId) {
       payload.deletedAt = null;
 
       // Validate status
-      if (!["new", "in_progress", "estimate_set", "virtual_quote", "estimate_canceled", "proposal_presented", "job_booked", "job_lost", "estimate_rescheduled", "unqualified"].includes(payload.status)) {
-        utils.sendErrorResponse(
-          res,
-          `Invalid status '${payload.status}'. Must be one of: new, in_progress, estimate_set, virtual_quote, estimate_canceled, proposal_presented, job_booked, job_lost, estimate_rescheduled, unqualified`
-        );
-        return;
+      if (!VALID_LEAD_STATUSES.includes(payload.status as any)) {
+        validationErrors.push({
+          index: i,
+          error: `Invalid status '${payload.status}'. Must be one of: ${VALID_LEAD_STATUSES.join(', ')}`
+        });
+        continue;
       }
 
       // Clear unqualifiedLeadReason if not unqualified
@@ -500,35 +522,52 @@ if (req.query.clientId) {
       if (payload.entrySource === null || payload.entrySource === undefined) {
         payload.entrySource = 'system';
       } else if (!['manual', 'system'].includes(payload.entrySource)) {
-        utils.sendErrorResponse(
-          res,
-          `Invalid entrySource '${payload.entrySource}'. Must be either 'manual' or 'system'`
-        );
-        return;
+        validationErrors.push({
+          index: i,
+          error: `Invalid entrySource '${payload.entrySource}'. Must be either 'manual' or 'system'`
+        });
+        continue;
       }
 
       processedPayloads.push(payload);
     }
 
-    // Always use phone/email uniqueness mode: match by clientId + (phone OR email)
-    const result = await this.service.bulkCreateLeads(processedPayloads, true);
-    
-    // Check if any important fields are missing from the processed payloads
-    const hasMissingFields = processedPayloads.some(payload => {
-      const phone = payload.phone?.trim() || '';
-      const email = payload.email?.trim() || '';
-      const service = payload.service?.trim() || '';
-      const zip = payload.zip?.trim() || '';
-      const name = payload.name?.trim() || '';
-      const adSetName = payload.adSetName?.trim() || '';
-      const adName = payload.adName?.trim() || '';
-      
-      return !phone || !email || !service || !zip || !name || !adSetName || !adName;
-    });
+    // If no valid leads to process, return error
+    if (processedPayloads.length === 0) {
+      utils.sendErrorResponse(res, {
+        message: "No valid leads to process",
+        statusCode: 400,
+        data: {
+          validationErrors,
+          totalSubmitted: leadsPayload.length,
+          validLeads: 0
+        }
+      });
+      return;
+    }
 
-    const responseMessage = hasMissingFields 
-      ? `Successfully processed ${result.stats.total} lead(s). Note: Some leads were processed with missing attributes such as name, phone, email, service, adSetName, or adName.`
-      : `Successfully processed ${result.stats.total} lead(s)`;
+    // Use uniqueness logic: match by clientId + (phone OR email) OR by clientId + name + service + zip + adSetName
+    const result = await this.service.bulkCreateLeads(processedPayloads);
+    
+    // Build response message
+    let responseMessage = `Successfully processed ${result.stats.total} lead(s)`;
+    
+    // Check if any leads had missing optional fields
+    const leadsWithMissingFields = missingFieldsTracker.filter(tracker => tracker.missingFields.length > 0);
+    
+    if (leadsWithMissingFields.length > 0) {
+      const allMissingFields = new Set<string>();
+      leadsWithMissingFields.forEach(tracker => {
+        tracker.missingFields.forEach(field => allMissingFields.add(field));
+      });
+      const fieldsList = Array.from(allMissingFields).join(', ');
+      responseMessage += `. Note: Some leads were saved with missing fields: ${fieldsList}`;
+    }
+    
+    // Add skipped leads info if any
+    if (validationErrors.length > 0) {
+      responseMessage += `. ${validationErrors.length} lead(s) skipped due to validation errors`;
+    }
     
     utils.sendSuccessResponse(res, 200, {
       success: true,
@@ -536,7 +575,17 @@ if (req.query.clientId) {
       data: {
         total: result.stats.total,
         newInserts: result.stats.newInserts,
-        duplicatesUpdated: result.stats.duplicatesUpdated
+        duplicatesUpdated: result.stats.duplicatesUpdated,
+        ...(leadsWithMissingFields.length > 0 && {
+          leadsWithMissingFields: leadsWithMissingFields.length,
+          missingFields: Array.from(new Set(leadsWithMissingFields.flatMap(tracker => tracker.missingFields)))
+        }),
+        ...(validationErrors.length > 0 && {
+          skippedLeads: {
+            count: validationErrors.length,
+            errors: validationErrors
+          }
+        })
       }
     });
   } catch (error) {
@@ -558,11 +607,10 @@ if (req.query.clientId) {
 
       // If Validate status is provided
       if (status) {
-        const validStatuses = ["new", "in_progress", "estimate_set", "virtual_quote", "estimate_canceled", "proposal_presented", "job_booked", "job_lost", "estimate_rescheduled", "unqualified"];
-        if (!validStatuses.includes(status)) {
+        if (!VALID_LEAD_STATUSES.includes(status as any)) {
           utils.sendErrorResponse(
             res,
-            `Invalid status. Must be one of: ${validStatuses.join(", ")}`
+            `Invalid status. Must be one of: ${VALID_LEAD_STATUSES.join(", ")}`
           );
           return;
         }
@@ -621,7 +669,7 @@ if (req.query.clientId) {
 
   async processSheetLeads(req: Request, res: Response): Promise<void> {
     try {
-      const { sheetUrl, clientId, uniquenessByPhoneEmail } = req.body;
+      const { sheetUrl, clientId } = req.body;
 
       if (!sheetUrl || !clientId) {
         utils.sendErrorResponse(res, "sheetUrl and clientId are required");
@@ -634,7 +682,6 @@ if (req.query.clientId) {
         await sheetsService.processCompleteSheet(
           sheetUrl, 
           clientId, 
-          !!uniquenessByPhoneEmail,
           this.service.bulkCreateLeads.bind(this.service),
           this.service.computeConversionRatesForClient.bind(this.service),
           this.service.getAllLeadsForClient.bind(this.service)

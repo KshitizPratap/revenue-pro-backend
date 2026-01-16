@@ -212,51 +212,82 @@ export class LeadService {
     /**
      * Bulk create leads with optional duplicate prevention
      */
-    async bulkCreateLeads(payloads, uniquenessByPhoneEmail = false) {
+    async bulkCreateLeads(payloads) {
         if (payloads.length === 0)
             return {
                 documents: [],
                 stats: { total: 0, newInserts: 0, duplicatesUpdated: 0 }
             };
+        // Each lead can have its own entrySource in the payload
+        // Default to 'system' if not specified, null, or undefined
+        const processedPayloads = payloads.map(lead => ({
+            ...lead,
+            entrySource: lead.entrySource || 'system'
+        }));
         // Build operations based on uniqueness flag
-        const bulkOps = payloads.map(lead => {
+        const bulkOps = processedPayloads.map(lead => {
+            const hasEmail = lead.email && lead.email.trim() !== '';
+            const hasPhone = lead.phone && lead.phone.trim() !== '';
             const filter = { clientId: lead.clientId };
-            // Apply email/phone uniqueness logic if enabled
-            if (uniquenessByPhoneEmail) {
-                const hasEmail = lead.email && lead.email.trim() !== '';
-                const hasPhone = lead.phone && lead.phone.trim() !== '';
+            // Apply uniqueness logic (always enabled)
+            if (hasEmail || hasPhone) {
+                // Has email/phone: match by clientId + (phone OR email) OR by clientId + name + service + zip + adSetName
+                // This handles case where lead was created zip-only, then email/phone added later
+                const emailPhoneFilter = { clientId: lead.clientId };
                 if (hasEmail && hasPhone) {
                     // Both exist: match by either email OR phone
-                    filter.$or = [
+                    emailPhoneFilter.$or = [
                         { email: lead.email },
                         { phone: lead.phone }
                     ];
                 }
                 else if (hasEmail) {
-                    filter.email = lead.email;
+                    emailPhoneFilter.email = lead.email;
                 }
                 else if (hasPhone) {
-                    filter.phone = lead.phone;
+                    emailPhoneFilter.phone = lead.phone;
                 }
-                else {
-                    // Neither email nor phone exist: force new document
-                    filter._id = new Date().getTime() + Math.random();
-                }
+                // Also check for existing zip-only lead with same name + service + zip + adSetName
+                const zipOnlyFilter = {
+                    clientId: lead.clientId,
+                    name: lead.name || '',
+                    service: lead.service || '',
+                    zip: lead.zip || '',
+                    adSetName: lead.adSetName || ''
+                };
+                // Match by either email/phone OR by zip-only combination
+                filter.$or = [
+                    emailPhoneFilter,
+                    zipOnlyFilter
+                ];
             }
             else {
-                // No uniqueness - always create new documents by using unique temporary ID
-                filter._id = new Date().getTime() + Math.random() + Math.random();
+                // No email/phone: uniqueness by clientId + name + service + zip + adSetName
+                filter.name = lead.name || '';
+                filter.service = lead.service || '';
+                filter.zip = lead.zip || '';
+                filter.adSetName = lead.adSetName || '';
+            }
+            // Separate entrySource to only set on insert, not update
+            const { entrySource, ...leadWithoutEntrySource } = lead;
+            const updateOperation = { $set: leadWithoutEntrySource };
+            // Only set entrySource on new document creation
+            if (entrySource) {
+                updateOperation.$setOnInsert = { entrySource };
             }
             return {
                 updateOne: {
                     filter,
-                    update: { $set: lead },
+                    update: updateOperation,
                     upsert: true
                 }
             };
         });
         const result = await this.leadRepo.bulkWriteLeads(bulkOps, { ordered: false });
-        const newInserts = result.upsertedCount || 0;
+        // Count both insertOne operations and upserted documents
+        const insertOneCount = result.insertedCount || 0;
+        const upsertedCount = result.upsertedCount || 0;
+        const newInserts = insertOneCount + upsertedCount;
         const duplicatesUpdated = result.modifiedCount || 0;
         const total = newInserts + duplicatesUpdated;
         return {

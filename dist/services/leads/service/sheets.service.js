@@ -321,7 +321,7 @@ export class SheetsService {
      * 6. Recalculate conversion rates using ALL leads (existing + updated)
      * 7. Return comprehensive results
      */
-    async processCompleteSheet(sheetUrl, clientId, uniquenessByPhoneEmail = false, bulkCreateLeads, computeConversionRatesForClient, getAllLeadsForClient) {
+    async processCompleteSheet(sheetUrl, clientId, bulkCreateLeads, computeConversionRatesForClient, getAllLeadsForClient) {
         // 1. Process sheet data (fetch, parse, extract insights)
         const sheetData = await this.processSheetData(sheetUrl, clientId);
         let { leads, stats: sheetStats, conversionRateInsights } = sheetData;
@@ -335,7 +335,7 @@ export class SheetsService {
         // 3. Normalise leads from sheet (status, unqualified reasons, preserve existing data)
         leads = normalizeLeadsFromSheet(leads, leadLookup);
         // 4. Bulk upsert leads to database with optional uniqueness
-        const bulkResult = await bulkCreateLeads(leads, uniquenessByPhoneEmail);
+        const bulkResult = await bulkCreateLeads(leads);
         // 5. Fetch ALL leads for this client from database (including updated ones)
         const allClientLeads = await getAllLeadsForClient(clientId);
         // 6. Recalculate conversion rates using ALL leads (existing + updated)

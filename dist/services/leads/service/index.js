@@ -27,8 +27,8 @@ export class CombinedLeadService {
     async findAndUpdateLeadByEmail(params) {
         return this.leadService.findAndUpdateLeadByEmail(params);
     }
-    async bulkCreateLeads(payloads, uniquenessByPhoneEmail) {
-        return this.leadService.bulkCreateLeads(payloads, uniquenessByPhoneEmail);
+    async bulkCreateLeads(payloads) {
+        return this.leadService.bulkCreateLeads(payloads);
     }
     async getLeadsPaginated(clientId, startDate, endDate, pagination, filters) {
         return this.leadService.getLeadsPaginated(clientId, startDate, endDate, pagination, filters);
