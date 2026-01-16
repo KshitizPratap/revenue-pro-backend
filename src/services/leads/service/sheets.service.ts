@@ -426,8 +426,7 @@ export class SheetsService {
   public async processCompleteSheet(
     sheetUrl: string,
     clientId: string,
-    uniquenessByPhoneEmail: boolean = false,
-    bulkCreateLeads: (leads: ILead[], uniquenessByPhoneEmail: boolean) => Promise<any>,
+    bulkCreateLeads: (leads: ILead[]) => Promise<any>,
     computeConversionRatesForClient: (leads: ILead[], clientId: string) => any[],
     getAllLeadsForClient: (clientId: string) => Promise<ILead[]>
   ): Promise<{
@@ -450,7 +449,7 @@ export class SheetsService {
     leads = normalizeLeadsFromSheet(leads, leadLookup);
     
     // 4. Bulk upsert leads to database with optional uniqueness
-    const bulkResult = await bulkCreateLeads(leads, uniquenessByPhoneEmail);
+    const bulkResult = await bulkCreateLeads(leads);
     
     // 5. Fetch ALL leads for this client from database (including updated ones)
     const allClientLeads = await getAllLeadsForClient(clientId);
