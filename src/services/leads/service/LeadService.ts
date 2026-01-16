@@ -343,41 +343,19 @@ export class LeadService {
       const hasPhone = lead.phone && lead.phone.trim() !== '';
       const filter: any = { clientId: lead.clientId };
       
-      // Apply uniqueness logic (always enabled)
+      // Apply uniqueness logic: if email/phone exists use them, else use zip+name+service+ad+adset
       if (hasEmail || hasPhone) {
-        // Has email/phone: match by clientId + (phone OR email) OR by clientId + name + service + zip + adSetName
-        // This handles case where lead was created zip-only, then email/phone added later
-        const emailPhoneFilter: any = { clientId: lead.clientId };
-        if (hasEmail && hasPhone) {
-          // Both exist: match by either email OR phone
-          emailPhoneFilter.$or = [
-            { email: lead.email },
-            { phone: lead.phone }
-          ];
-        } else if (hasEmail) {
-          emailPhoneFilter.email = lead.email;
-        } else if (hasPhone) {
-          emailPhoneFilter.phone = lead.phone;
-        }
-        
-        // Also check for existing zip-only lead with same name + service + zip + adSetName
-        const zipOnlyFilter: any = {
-          clientId: lead.clientId,
-          name: lead.name || '',
-          service: lead.service || '',
-          zip: lead.zip || '',
-          adSetName: lead.adSetName || ''
-        };
-        
-        // Match by either email/phone OR by zip-only combination
-        filter.$or = [
-          emailPhoneFilter,
-          zipOnlyFilter
-        ];
+        // Has email/phone: match by clientId + (email OR phone)
+        const conditions: any[] = [];
+        if (hasEmail) conditions.push({ email: lead.email });
+        if (hasPhone) conditions.push({ phone: lead.phone });
+        filter.$or = conditions;
       } else {
-        // No email/phone: uniqueness by clientId + name + service + zip + adSetName
+        // No email/phone: uniqueness by clientId + zip + name + service + adName + adSetName
+        filter.zip = lead.zip || '';
         filter.name = lead.name || '';
         filter.service = lead.service || '';
+        filter.adName = lead.adName || '';
         filter.zip = lead.zip || '';
         filter.adSetName = lead.adSetName || '';
       }
