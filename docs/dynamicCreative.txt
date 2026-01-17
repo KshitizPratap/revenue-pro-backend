@@ -1,0 +1,684 @@
+API 1 -> 4263734520614702?fields=name,object_story_spec,image_url,thumbnail_url,video_id,asset_feed_spec,........
+
+RESPONSE Type 1 ->
+{
+    "name": "{{product.name}} 2025-09-30-7ff7f1ebc1bada373496a4317fe89851",
+    "object_story_spec": {
+      "page_id": "269732262880461",
+      "instagram_user_id": "17841444561636530"
+    },
+    "thumbnail_url": "https://scontent.fdel27-3.fna.fbcdn.net/v/t15.5256-10/556976696_1201693071784829_4366131494103425386_n.jpg?_nc_cat=110&ccb=1-7&_nc_ohc=5LOFs_iS3T4Q7kNvwE3PEmC&_nc_oc=AdmbqHosRuRLiBaHm0GPKpdX9olRUwfRhUpM8BH3eXsg4GuQ9k6ggvz3SW4nxvIGm97fXfpmRCKebMLA-0-tvHUn&_nc_zt=23&_nc_ht=scontent.fdel27-3.fna&edm=AAT1rw8EAAAA&_nc_gid=1Rx2AW_ulIx2dK-qOoST2w&_nc_tpa=Q5bMBQHmainO-P7nD9pM7NYnb7eKf07RGfluXsI2FFhBk9xem_fyeYPEdmD-Ybp1arWbs0pcPlm8rNVtQg&stp=c0.5000x0.5000f_dst-emg0_p64x64_q75_tt6&ur=b696e2&_nc_sid=58080a&oh=00_Afobvrenx4_3pAevf-Rf5fOTKBALffOWIwLZpQ7pTqqYlQ&oe=6971B563",
+    "asset_feed_spec": {
+      "videos": [
+        {
+          "adlabels": [
+            {
+              "name": "placement_asset_fb5fd8d8f48c1499c_1759205584211",
+              "id": "120232467743580122"
+            },
+            {
+              "name": "placement_asset_f0e6020e92357f4f7_1759205576748",
+              "id": "120232467743590122"
+            },
+            {
+              "name": "placement_asset_fcdf1c97fc3fbb12c_1759205554380",
+              "id": "120232467743600122"
+            }
+          ],
+          "video_id": "1252846853264584",
+          "thumbnail_url": "https://scontent.fdel27-3.fna.fbcdn.net/v/t15.5256-10/556976696_1201693071784829_4366131494103425386_n.jpg?stp=dst-jpg_s160x160_tt6&_nc_cat=110&ccb=1-7&_nc_sid=b696e2&_nc_ohc=5LOFs_iS3T4Q7kNvwE3PEmC&_nc_oc=AdmbqHosRuRLiBaHm0GPKpdX9olRUwfRhUpM8BH3eXsg4GuQ9k6ggvz3SW4nxvIGm97fXfpmRCKebMLA-0-tvHUn&_nc_zt=23&_nc_ht=scontent.fdel27-3.fna&edm=AAT1rw8EAAAA&_nc_gid=1Rx2AW_ulIx2dK-qOoST2w&_nc_tpa=Q5bMBQGkjre0kTcdZ3vJPXQPULJE2V9A_dbN5fnz0q1yUuafJ-nJzMgS8RhgOD83sQOFHMkbz4vgD4bjpQ&oh=00_Afp00tIHC8qgpCUWwuPDsx_YbKIPDa2A5oYm3CXhEfA5sQ&oe=6971B563"
+        },
+        {
+          "adlabels": [
+            {
+              "name": "placement_asset_f8f47cad714d8a58c_1759205584210",
+              "id": "120232467743570122"
+            }
+          ],
+          "video_id": "1297258381563688",
+          "thumbnail_url": "https://scontent.fdel27-6.fna.fbcdn.net/v/t15.5256-10/558096578_2258395844676801_2449540801016155359_n.jpg?stp=dst-jpg_s160x160_tt6&_nc_cat=106&ccb=1-7&_nc_sid=b696e2&_nc_ohc=9sY6x4hm2ysQ7kNvwH12g9r&_nc_oc=AdnUeE17h2GVIBembSpbRrrWYTb-wIlGz3oQALlSyAdSJC0nu_lm0H7PpD_a26Mz58xZ6rnGfddEoPvJJ0-yEJWk&_nc_zt=23&_nc_ht=scontent.fdel27-6.fna&edm=AAT1rw8EAAAA&_nc_gid=1Rx2AW_ulIx2dK-qOoST2w&_nc_tpa=Q5bMBQHnlO6Q0feYPo-nx-vsisQdG5AEWQyLVqe3ii9BkRQrIknAPdZpk4mJZQfaD9Ks0bIGO6lPalFdPQ&oh=00_AfrjXNLE88BDrShwAe_-M5M5zX4pmZ8jJ6z7ks5PXqwGlw&oe=6971D370"
+        }
+      ],
+      "bodies": [
+        {
+          "adlabels": [
+            {
+              "name": "placement_asset_fc9a459a232c5e395_1759205584210",
+              "id": "120232467743620122"
+            },
+            {
+              "name": "placement_asset_fb11fc5f259febb24_1759205584212",
+              "id": "120232467743640122"
+            }
+          ],
+          "text": "The homeowners were polite…but you could feel the hesitation. The last painter they hired ghosted them halfway through the job.
+  
+  No updates. No cleanup. No callbacks.
+  
+  They weren’t just frustrated — they were embarrassed. The living room was only half-painted. And they had family visiting in a week.
+  
+  When our team at 216 Painting showed up, we made one promise:
+  
+  “You’ll never wonder what’s going on and we won’t leave until it’s right.”
+  
+  That’s how we built this company.
+  
+  We’re not just here to put color on the walls.
+  We’re here to make the entire experience feel better than you imagined.
+  
+   ✔️ Clean, respectful crews trained in-house
+   ✔️ Daily progress updates and clear timelines
+   ✔️ No surprise costs — the price you’re quoted is the price you pay
+   ✔️ A final walkthrough to make sure it’s perfect
+  
+  Because many families we sit down with have stories like this...
+  
+  And we’ve made it our mission to change how it ends.
+  If you’ve been burned by bad contractors —
+  Or you’re just ready for a refresh that’s actually refreshing…
+  
+  Click ‘Get Quote’ to schedule your FREE estimate today.
+  
+  Let’s show you what it’s like to work with a crew that really gets it.
+  
+  P.S.  Homeowners who book this month can save hundreds off of their painting projects."
+        }
+      ],
+      "call_to_action_types": [
+        "GET_QUOTE"
+      ],
+      "call_to_actions": [
+        {
+          "type": "GET_QUOTE",
+          "value": {
+            "lead_gen_form_id": "5466190623607898"
+          }
+        }
+      ],
+      "descriptions": [
+        {
+          "text": "Local, Loved, & Trusted"
+        }
+      ],
+      "link_urls": [
+        {
+          "adlabels": [
+            {
+              "name": "placement_asset_f63faa7ac2c4d07d6_1759205584212",
+              "id": "120232467743530122"
+            },
+            {
+              "name": "placement_asset_f82ac7dd03ce8e99e_1759205584210",
+              "id": "120232467743540122"
+            }
+          ],
+          "website_url": "http://fb.me/",
+          "display_url": ""
+        }
+      ],
+      "titles": [
+        {
+          "adlabels": [
+            {
+              "name": "placement_asset_f583f6e78be12f42f_1759205584212",
+              "id": "120232467743560122"
+            },
+            {
+              "name": "placement_asset_f1064e63a6e9ef04e_1759205584210",
+              "id": "120232467743610122"
+            }
+          ],
+          "text": "😍 LOVEE Your Home 😍"
+        },
+        {
+          "adlabels": [
+            {
+              "name": "placement_asset_f583f6e78be12f42f_1759205584212",
+              "id": "120232467743560122"
+            },
+            {
+              "name": "placement_asset_f1064e63a6e9ef04e_1759205584210",
+              "id": "120232467743610122"
+            }
+          ],
+          "text": "Schedule Painting Estimate!"
+        }
+      ],
+      "ad_formats": [
+        "SINGLE_VIDEO"
+      ],
+      "asset_customization_rules": [
+        {
+          "customization_spec": {
+            "age_max": 65,
+            "age_min": 13,
+            "publisher_platforms": [
+              "facebook",
+              "instagram",
+              "audience_network"
+            ],
+            "facebook_positions": [
+              "facebook_reels",
+              "facebook_reels_overlay",
+              "story"
+            ],
+            "instagram_positions": [
+              "ig_search",
+              "profile_reels",
+              "story",
+              "reels"
+            ],
+            "audience_network_positions": [
+              "classic",
+              "rewarded_video"
+            ]
+          },
+          "video_label": {
+            "name": "placement_asset_fb5fd8d8f48c1499c_1759205584211",
+            "id": "120232467743580122"
+          },
+          "body_label": {
+            "name": "placement_asset_fb11fc5f259febb24_1759205584212",
+            "id": "120232467743640122"
+          },
+          "link_url_label": {
+            "name": "placement_asset_f63faa7ac2c4d07d6_1759205584212",
+            "id": "120232467743530122"
+          },
+          "title_label": {
+            "name": "placement_asset_f583f6e78be12f42f_1759205584212",
+            "id": "120232467743560122"
+          },
+          "priority": 1
+        },
+        {
+          "customization_spec": {
+            "age_max": 65,
+            "age_min": 13
+          },
+          "video_label": {
+            "name": "placement_asset_f8f47cad714d8a58c_1759205584210",
+            "id": "120232467743570122"
+          },
+          "body_label": {
+            "name": "placement_asset_fc9a459a232c5e395_1759205584210",
+            "id": "120232467743620122"
+          },
+          "link_url_label": {
+            "name": "placement_asset_f82ac7dd03ce8e99e_1759205584210",
+            "id": "120232467743540122"
+          },
+          "title_label": {
+            "name": "placement_asset_f1064e63a6e9ef04e_1759205584210",
+            "id": "120232467743610122"
+          },
+          "priority": 2
+        }
+      ],
+      "optimization_type": "PLACEMENT",
+      "additional_data": {
+        "multi_share_end_card": false,
+        "is_click_to_message": false
+      },
+      "reasons_to_shop": false,
+      "shops_bundle": false
+    },
+    "id": "4263734520614702"
+  }
+
+  isDynamic=true but type=video ........if fetch video url from video_id fails then load previews and save in DB
+  VIDEO URL RESOLUTION RULE
+
+  1. Try:
+    GET /video_id?fields=source
+
+  If success:
+    → save video_url
+
+  If (#10) permission error:
+    → use thumbnail for preview
+    → <creative_id>/previews?ad_format=DESKTOP_FEED_STANDARD
+    → Response - {
+    "data": [
+      {
+        "body": "<iframe src=\"https://business.facebook.com/ads/api/preview_iframe.php?d=AQKaVG1rYuw-C_NouidscWhy-u5XhieKs-TcLgmty0HsNI1_AjZjoY2KZnUnddks26tVITRrUltyiREBzK064EdNlcBK1UcU_pJs_16j4w3So8bv7Vgc-yI37P9eRaEgXAGMGnGf2C5CtSahKeQiAa-82wJOufIJo1P6K6ivFE2ZuiH05yNkjd6qb2M46NGUXW7KWUDZXG7gXIRrF8ot0ibdDG-55UzH7onZhdLbTYmysp86uoWT48y3izGUid75ArfS-4ln9wGEAjs0sOf1M2PYiETlkMGh1XSdRXvf8Ovyw0fMxmNEKz-Vi0piyzv0JDnV8yIECrNPCfa2r0O2kgZ1F4jA7ZUfwQ_gAqpA9mVimKulIFaQaLIBMBe-nMiyGWTmYQnednmx_gFnxcGFBxsF-D43sJ-sJK49G0D61q0Rvm04jmaADSjGvdiIu54SdwU&amp;t=AQKYeA2-6MapEszx2y0\" width=\"540\" height=\"690\" scrolling=\"yes\" style=\"border: none;\"></iframe>"
+      }
+    ]
+    }
+    2. Save preview iframe string in db
+
+
+API 2 -> 597522193445237?fields=name,object_story_spec,image_url,thumbnail_url,video_id,asset_feed_spec,........
+
+RESPONSE Type 2 ->
+{
+  "name": "{{product.name}} 2025-09-30-8f2d44078be2d03efc032ded5727505e",
+  "object_story_spec": {
+    "page_id": "269732262880461",
+    "instagram_user_id": "17841444561636530"
+  },
+  "thumbnail_url": "https://scontent.fdel27-6.fna.fbcdn.net/v/t45.1600-4/557549336_10235757194017578_8951982409160353231_n.jpg?_nc_cat=106&ccb=1-7&_nc_ohc=yD4Pww6zDYwQ7kNvwG6hWU4&_nc_oc=AdlW4Np5Fv0ItoYqv5iN_nel626eYUWzDRsUHqOIsLsA3g9ztLTLKeuRK2xYhu-Q7Paf7swotL6pIBJmioOX6dmy&_nc_zt=1&_nc_ht=scontent.fdel27-6.fna&edm=AAT1rw8EAAAA&_nc_gid=hu_gYdmJ_KsF4ysbG2HF6w&_nc_tpa=Q5bMBQFWV967k3lZeBNCJN2hx53gaLyMR0gDYGHPLLR_p6yTdH16jW4TvhGm3344UI4cBcLrGslpvlMmlg&stp=c0.5000x0.5000f_dst-emg0_p64x64_q75_tt6&ur=4c02d7&_nc_sid=58080a&oh=00_Afobbqf8F6wPMwzzZ0OPJSum6GymFSsoP4uj5kfONnvr_g&oe=6971D935",
+  "asset_feed_spec": {
+    "images": [
+      {
+        "adlabels": [
+          {
+            "name": "placement_asset_f0b9d06844f521df9_1759205728236",
+            "id": "120232467863260122"
+          }
+        ],
+        "hash": "c0df13d953cd7cb603440887e0856c25",
+        "image_crops": {
+          "191x100": [
+            [
+              0,
+              141
+            ],
+            [
+              2048,
+              1213
+            ]
+          ]
+        }
+      },
+      {
+        "adlabels": [
+          {
+            "name": "placement_asset_ff1aa50ad6abbf12c_1759205728239",
+            "id": "120232467863250122"
+          }
+        ],
+        "hash": "c0df13d953cd7cb603440887e0856c25",
+        "image_crops": {
+          "100x100": [
+            [
+              314,
+              0
+            ],
+            [
+              1675,
+              1361
+            ]
+          ]
+        }
+      },
+      {
+        "adlabels": [
+          {
+            "name": "placement_asset_f668a59531c684ea7_1759205720272",
+            "id": "120232467863060122"
+          }
+        ],
+        "hash": "c0df13d953cd7cb603440887e0856c25"
+      },
+      {
+        "adlabels": [
+          {
+            "name": "placement_asset_f595eb0e2c2c6196b_1759205728241",
+            "id": "120232467863240122"
+          }
+        ],
+        "hash": "c0df13d953cd7cb603440887e0856c25",
+        "image_crops": {
+          "90x160": [
+            [
+              678,
+              0
+            ],
+            [
+              1444,
+              1361
+            ]
+          ]
+        }
+      }
+    ],
+    "bodies": [
+      {
+        "adlabels": [
+          {
+            "name": "placement_asset_f8d923bb1959396d0_1759205720286",
+            "id": "120232467863050122"
+          },
+          {
+            "name": "placement_asset_f9f39c0cc2fc0d899_1759205728240",
+            "id": "120232467863180122"
+          },
+          {
+            "name": "placement_asset_f9d30d7f4fffb56ea_1759205720283",
+            "id": "120232467863190122"
+          },
+          {
+            "name": "placement_asset_f6da002976a2e2609_1759205728242",
+            "id": "120232467863200122"
+          },
+          {
+            "name": "placement_asset_f2c2e5e9ab1a88e11_1759205728238",
+            "id": "120232467863210122"
+          },
+          {
+            "name": "placement_asset_f5ad0346578d5b72a_1759205720285",
+            "id": "120232467863220122"
+          },
+          {
+            "name": "placement_asset_f07d009ed47b6d1e4_1759205720276",
+            "id": "120232467863230122"
+          }
+        ],
+        "text": "My name is Jack Newman, and along with my business partner Noah Zimmerman, we own 216 Painting. We serve the greater Cleveland area, and we’re incredibly honored to be part of these amazing communities.
+
+Homeowners tell us they repaint because they want a space that finally feels like them, not the color the builder picked, or whatever the last owner left behind.
+
+They want something fresher. Healthier. A home that feels like it reflects the care and pride they put into it.
+
+And when it comes to hiring a painting company, they’re looking for clear communication, consistent crews, and a process that doesn’t turn their life upside down.
+
+That’s exactly what 216 Painting was built for.
+
+Right now is a great time to book- we’re currently offering a free color consult and priority scheduling when the project is booked this month.
+
+✔️ In-house crews trained to deliver consistent, high-quality results
+
+✔️ Daily progress updates so there are no surprises
+
+✔️ A clean, respectful crew that treats every home like their own
+
+AND…. Homeowners who book this month can save hundreds off of their painting projects. 
+
+To start the conversation, just click or tap ‘Get Quote’ and schedule a FREE estimate today.
+
+Looking forward to serving you,
+Jack & Noah, Owners
+https://www.216-painting.com/"
+      }
+    ],
+    "call_to_action_types": [
+      "GET_QUOTE"
+    ],
+    "call_to_actions": [
+      {
+        "type": "GET_QUOTE",
+        "value": {
+          "lead_gen_form_id": "5466190623607898"
+        }
+      }
+    ],
+    "descriptions": [
+      {
+        "text": "Local, Loved, & Trusted"
+      }
+    ],
+    "link_urls": [
+      {
+        "adlabels": [
+          {
+            "name": "placement_asset_fe4f8a2625d4bb9c8_1759205720283",
+            "id": "120232467863130122"
+          },
+          {
+            "name": "placement_asset_f094c0e29d6edb85e_1759205720286",
+            "id": "120232467863150122"
+          },
+          {
+            "name": "placement_asset_f74b28c7d9a2a9e2d_1759205728240",
+            "id": "120232467863160122"
+          },
+          {
+            "name": "placement_asset_fdbb9ab067f62b782_1759205720282",
+            "id": "120232467863270122"
+          },
+          {
+            "name": "placement_asset_f9588f816a96a1881_1759205720285",
+            "id": "120232467863340122"
+          },
+          {
+            "name": "placement_asset_fe097866e185ea856_1759205728242",
+            "id": "120232467863350122"
+          },
+          {
+            "name": "placement_asset_f90ea289822d3b6e9_1759205728238",
+            "id": "120232467863360122"
+          }
+        ],
+        "website_url": "http://fb.me/",
+        "display_url": ""
+      }
+    ],
+    "titles": [
+      {
+        "adlabels": [
+          {
+            "name": "placement_asset_f67bde98040996013_1759205720283",
+            "id": "120232467863070122"
+          },
+          {
+            "name": "placement_asset_f391949727251cdb0_1759205728242",
+            "id": "120232467863080122"
+          },
+          {
+            "name": "placement_asset_faf1b80a6eb8fc856_1759205720285",
+            "id": "120232467863140122"
+          },
+          {
+            "name": "placement_asset_fb4bbb86742772ff8_1759205728240",
+            "id": "120232467863170122"
+          },
+          {
+            "name": "placement_asset_f4d5ca9e74f238f67_1759205728238",
+            "id": "120232467863300122"
+          },
+          {
+            "name": "placement_asset_f0fd62e7602212ad4_1759205720281",
+            "id": "120232467863310122"
+          },
+          {
+            "name": "placement_asset_f01a654b499b20e0e_1759205720286",
+            "id": "120232467863320122"
+          }
+        ],
+        "text": "😍 LOVEE Your Home 😍"
+      },
+      {
+        "adlabels": [
+          {
+            "name": "placement_asset_f67bde98040996013_1759205720283",
+            "id": "120232467863070122"
+          },
+          {
+            "name": "placement_asset_f391949727251cdb0_1759205728242",
+            "id": "120232467863080122"
+          },
+          {
+            "name": "placement_asset_faf1b80a6eb8fc856_1759205720285",
+            "id": "120232467863140122"
+          },
+          {
+            "name": "placement_asset_fb4bbb86742772ff8_1759205728240",
+            "id": "120232467863170122"
+          },
+          {
+            "name": "placement_asset_f4d5ca9e74f238f67_1759205728238",
+            "id": "120232467863300122"
+          },
+          {
+            "name": "placement_asset_f0fd62e7602212ad4_1759205720281",
+            "id": "120232467863310122"
+          },
+          {
+            "name": "placement_asset_f01a654b499b20e0e_1759205720286",
+            "id": "120232467863320122"
+          }
+        ],
+        "text": "Schedule Painting Estimate!"
+      }
+    ],
+    "ad_formats": [
+      "SINGLE_IMAGE"
+    ],
+    "asset_customization_rules": [
+      {
+        "customization_spec": {
+          "age_max": 65,
+          "age_min": 13,
+          "publisher_platforms": [
+            "facebook"
+          ],
+          "facebook_positions": [
+            "search"
+          ]
+        },
+        "image_label": {
+          "name": "placement_asset_f0b9d06844f521df9_1759205728236",
+          "id": "120232467863260122"
+        },
+        "body_label": {
+          "name": "placement_asset_f2c2e5e9ab1a88e11_1759205728238",
+          "id": "120232467863210122"
+        },
+        "link_url_label": {
+          "name": "placement_asset_f90ea289822d3b6e9_1759205728238",
+          "id": "120232467863360122"
+        },
+        "title_label": {
+          "name": "placement_asset_f4d5ca9e74f238f67_1759205728238",
+          "id": "120232467863300122"
+        },
+        "priority": 1
+      },
+      {
+        "customization_spec": {
+          "age_max": 65,
+          "age_min": 13,
+          "publisher_platforms": [
+            "facebook",
+            "instagram"
+          ],
+          "facebook_positions": [
+            "feed",
+            "biz_disco_feed",
+            "facebook_reels_overlay",
+            "profile_feed",
+            "notification",
+            "instream_video",
+            "marketplace"
+          ],
+          "instagram_positions": [
+            "stream",
+            "explore",
+            "explore_home",
+            "profile_feed"
+          ]
+        },
+        "image_label": {
+          "name": "placement_asset_ff1aa50ad6abbf12c_1759205728239",
+          "id": "120232467863250122"
+        },
+        "body_label": {
+          "name": "placement_asset_f9f39c0cc2fc0d899_1759205728240",
+          "id": "120232467863180122"
+        },
+        "link_url_label": {
+          "name": "placement_asset_f74b28c7d9a2a9e2d_1759205728240",
+          "id": "120232467863160122"
+        },
+        "title_label": {
+          "name": "placement_asset_fb4bbb86742772ff8_1759205728240",
+          "id": "120232467863170122"
+        },
+        "priority": 2
+      },
+      {
+        "customization_spec": {
+          "age_max": 65,
+          "age_min": 13,
+          "publisher_platforms": [
+            "facebook",
+            "instagram",
+            "audience_network"
+          ],
+          "facebook_positions": [
+            "facebook_reels",
+            "story"
+          ],
+          "instagram_positions": [
+            "ig_search",
+            "profile_reels",
+            "story",
+            "reels"
+          ],
+          "audience_network_positions": [
+            "classic",
+            "rewarded_video"
+          ]
+        },
+        "image_label": {
+          "name": "placement_asset_f595eb0e2c2c6196b_1759205728241",
+          "id": "120232467863240122"
+        },
+        "body_label": {
+          "name": "placement_asset_f6da002976a2e2609_1759205728242",
+          "id": "120232467863200122"
+        },
+        "link_url_label": {
+          "name": "placement_asset_fe097866e185ea856_1759205728242",
+          "id": "120232467863350122"
+        },
+        "title_label": {
+          "name": "placement_asset_f391949727251cdb0_1759205728242",
+          "id": "120232467863080122"
+        },
+        "priority": 3
+      },
+      {
+        "customization_spec": {
+          "age_max": 65,
+          "age_min": 13
+        },
+        "image_label": {
+          "name": "placement_asset_f668a59531c684ea7_1759205720272",
+          "id": "120232467863060122"
+        },
+        "body_label": {
+          "name": "placement_asset_f07d009ed47b6d1e4_1759205720276",
+          "id": "120232467863230122"
+        },
+        "link_url_label": {
+          "name": "placement_asset_fdbb9ab067f62b782_1759205720282",
+          "id": "120232467863270122"
+        },
+        "title_label": {
+          "name": "placement_asset_f0fd62e7602212ad4_1759205720281",
+          "id": "120232467863310122"
+        },
+        "priority": 4
+      }
+    ],
+    "optimization_type": "PLACEMENT",
+    "additional_data": {
+      "multi_share_end_card": false,
+      "is_click_to_message": false
+    },
+    "reasons_to_shop": false,
+    "shops_bundle": false
+  },
+  "id": "597522193445237"
+}
+
+  => isDynamic=true but type=image .......images hash can be used to fetch image urls
+
+  1. /act_850264192703191/adimages?hashes=["bba44b71c5a37f6ebd61562e03ca8383"]&fields=url
+  2. {
+    "data": [
+      {
+        "url": "https://scontent.fdel27-1.fna.fbcdn.net/v/t45.1600-4/559655993_25439611865625436_1266549375589552728_n.jpg?_nc_cat=101&ccb=1-7&_nc_sid=890911&_nc_ohc=wYEvI1NOxKYQ7kNvwEo8jT2&_nc_oc=AdlpOg8KREvsS-9lB7LCIxWfye85M7AiQ0oXp4u4gD49st5kihJBFqf9Ks7aV8NxipT9E4lnUqe_GtCKxzfu3cBc&_nc_zt=1&_nc_ht=scontent.fdel27-1.fna&edm=AJcBmwoEAAAA&_nc_gid=2K-3YwMeEp8eFogBImYSEw&_nc_tpa=Q5bMBQEISZqCWS9fku4k0EzXWPCZPhxB-36yICPu5PEnqd_5b5zuIb-vgyU7eznwlZyvJbXM4IxYIlfKPg&oh=00_AfqinbRJxybkTmI-eOmmy71FYrvLk3jAe79KDKV5dP9bNw&oe=6971CB46",
+        "id": "850264192703191:bba44b71c5a37f6ebd61562e03ca8383"
+      }
+    ],
+    "paging": {
+      "cursors": {
+        "before": "QVFIU0xwRGNpVDF6NzBubFdPRVpEUk5feUZAubll1M1VsQTd2YW0ycE1wR25zZATNiWDFqTUpPeEVacFU0VWwxaTAtd2lsRWNQbzFoUUh0X1dDX2RUcGxUeHVn",
+        "after": "QVFIU0xwRGNpVDF6NzBubFdPRVpEUk5feUZAubll1M1VsQTd2YW0ycE1wR25zZATNiWDFqTUpPeEVacFU0VWwxaTAtd2lsRWNQbzFoUUh0X1dDX2RUcGxUeHVn"
+      }
+    }
+  }
+  3. Save url in db as image_url["...."]
