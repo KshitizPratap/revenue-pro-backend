@@ -43,6 +43,13 @@ export class CreativesRepository {
         return result;
     }
     /**
+     * Update specific fields of a creative (for lightweight URL refreshes)
+     */
+    async updateCreative(creativeId, updates) {
+        const updated = await CreativeModel.findOneAndUpdate({ creativeId, isDeleted: false }, { $set: updates }, { new: true });
+        return updated ? updated.toObject() : null;
+    }
+    /**
      * Save or update multiple creatives
      */
     async upsertCreatives(creativesData) {

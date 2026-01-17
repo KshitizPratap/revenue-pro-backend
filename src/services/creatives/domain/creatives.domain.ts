@@ -59,6 +59,9 @@ export interface ICreative {
   // Full API Response (for reference)
   rawData: any;
   
+  // Dynamic Creative Flag
+  isDynamic: boolean;
+  
   // Metadata
   lastFetchedAt: Date;
   isDeleted: boolean;

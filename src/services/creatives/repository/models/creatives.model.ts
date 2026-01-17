@@ -74,6 +74,9 @@ const creativesSchema = new Schema<ICreativeDocument>(
     // Full API Response (for reference)
     rawData: { type: Schema.Types.Mixed, default: null },
     
+    // Dynamic Creative Flag
+    isDynamic: { type: Boolean, default: false },
+    
     // Metadata
     lastFetchedAt: { type: Date, default: Date.now },
     isDeleted: { type: Boolean, default: false },

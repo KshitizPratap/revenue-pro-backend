@@ -2,91 +2,116 @@ import { fbGet } from '../../facebook/fbClient.js';
 import { creativesRepository } from '../repository/CreativesRepository.js';
 export class CreativesService {
     /**
-     * Transform thumbnail URL to high-resolution URL by manipulating Facebook CDN parameters
-     */
-    getHighResImageUrl(thumbnailUrl) {
-        if (!thumbnailUrl)
-            return thumbnailUrl;
-        // Facebook CDN URLs support size parameters
-        // Transform to get higher resolution
-        if (thumbnailUrl.includes('fbcdn.net')) {
-            // Remove size restrictions from URL
-            let highResUrl = thumbnailUrl
-                .replace(/\/s\d+x\d+\//g, '/') // Remove size restrictions like /s320x320/
-                .replace(/\/(p|cp)\d+x\d+\//g, '/') // Remove crop/profile sizes
-                .replace(/_s\./, '_o.'); // Change _s (small) to _o (original)
-            return highResUrl;
-        }
-        return thumbnailUrl;
-    }
-    /**
      * Fetch image URL from hash via Facebook API
+     * Uses /adimages endpoint with hashes parameter
      */
     async fetchImageUrlFromHash(imageHash, adAccountId, accessToken) {
         if (!imageHash)
             return { url: null, width: null, height: null };
         try {
             const accountId = adAccountId.replace('act_', '');
-            // Try Method 1: adimages endpoint with ALL fields
-            try {
-                const response = await fbGet(`/${accountId}/adimages`, {
-                    hashes: [imageHash],
-                    // Request ALL available fields
-                    fields: 'id,account_id,hash,height,width,name,url,url_128,permalink_url,created_time,updated_time'
-                }, accessToken);
-                console.log('[IMAGE HASH] Full response:', JSON.stringify(response, null, 2));
-                if (response?.data) {
-                    let imageData = null;
-                    // Handle object format: { data: { hash: { url: "..." } } }
-                    if (typeof response.data === 'object' && !Array.isArray(response.data)) {
-                        imageData = response.data[imageHash];
-                    }
-                    // Handle array format: { data: [{ hash: "...", url: "..." }] }
-                    else if (Array.isArray(response.data)) {
-                        imageData = response.data.find((img) => img.hash === imageHash) || response.data[0];
-                    }
-                    if (imageData) {
-                        // Try all possible URL fields
-                        const possibleUrls = [
-                            imageData.url_128, // Usually full-res despite name
-                            imageData.url,
-                            imageData.permalink_url
-                        ].filter(Boolean);
-                        if (possibleUrls.length > 0) {
-                            return {
-                                url: possibleUrls[0],
-                                width: imageData.width || null,
-                                height: imageData.height || null
-                            };
-                        }
-                    }
-                }
-            }
-            catch (err) {
-            }
-            // Try Method 2: Direct hash lookup as endpoint
-            try {
-                const directResponse = await fbGet(`/${imageHash}`, {
-                    fields: 'url,url_128,permalink_url,height,width'
-                }, accessToken);
-                if (directResponse) {
-                    const url = directResponse.url_128 || directResponse.url || directResponse.permalink_url || null;
-                    if (url) {
+            // Use /adimages endpoint with hashes parameter
+            const response = await fbGet(`/${accountId}/adimages`, {
+                hashes: JSON.stringify([imageHash]),
+                // Request all available fields including permalink_url (permanent URL)
+                fields: 'id,account_id,hash,height,width,name,url,url_128,permalink_url,created_time,updated_time'
+            }, accessToken);
+            if (response?.data && Array.isArray(response.data)) {
+                // Facebook always returns array format: { data: [{ hash: "...", url: "..." }] }
+                const imageData = response.data.find((img) => img.hash === imageHash);
+                if (imageData) {
+                    // Prefer permalink_url (permanent) over url (temporary)
+                    // Also check url_128 for higher resolution
+                    const imageUrl = imageData.permalink_url || imageData.url_128 || imageData.url || null;
+                    if (imageUrl) {
                         return {
-                            url,
-                            width: directResponse.width || null,
-                            height: directResponse.height || null
+                            url: imageUrl,
+                            width: imageData.width || null,
+                            height: imageData.height || null
                         };
                     }
                 }
             }
-            catch (err) {
+            else if (response?.data) {
+                console.warn(`[IMAGE HASH] Unexpected adimages response format for hash ${imageHash}:`, typeof response.data);
             }
             return { url: null, width: null, height: null };
         }
         catch (error) {
-            console.error(`[IMAGE HASH] Fatal error:`, error);
+            console.error(`[IMAGE HASH] Error fetching image for hash ${imageHash}:`, error.message || error);
             return { url: null, width: null, height: null };
+        }
+    }
+    /**
+     * Detect if a creative is dynamic/template-based
+     */
+    isDynamicCreative(creativeData) {
+        return !!(creativeData.asset_feed_spec != null ||
+            creativeData.name?.includes('{{') ||
+            creativeData.object_story_spec?.template_data != null);
+    }
+    /**
+     * Fetch image URLs from multiple hashes in batch
+     * Uses /adimages endpoint with hashes parameter (JSON array format)
+     */
+    async fetchImageUrlsFromHashes(imageHashes, adAccountId, accessToken) {
+        if (!imageHashes || imageHashes.length === 0)
+            return [];
+        try {
+            const accountId = adAccountId.replace('act_', '');
+            // Batch fetch via /adimages endpoint
+            // hashes parameter: JSON.stringify creates ["hash1","hash2"] which Facebook accepts
+            const response = await fbGet(`/${accountId}/adimages`, {
+                hashes: JSON.stringify(imageHashes),
+                // Include permalink_url for permanent URLs
+                fields: 'hash,url,url_128,permalink_url,width,height'
+            }, accessToken);
+            const results = [];
+            if (response?.data && Array.isArray(response.data)) {
+                // Facebook always returns array format: { data: [{ hash: "...", url: "..." }] }
+                const hashMap = new Map(imageHashes.map(h => [h, true]));
+                for (const imageData of response.data) {
+                    if (imageData?.hash && hashMap.has(imageData.hash)) {
+                        // Prefer permalink_url (permanent) over url (temporary)
+                        // Also check url_128 for higher resolution
+                        const imageUrl = imageData.permalink_url || imageData.url_128 || imageData.url;
+                        if (imageUrl) {
+                            results.push({
+                                url: imageUrl,
+                                hash: imageData.hash,
+                                width: imageData.width || null,
+                                height: imageData.height || null
+                            });
+                        }
+                    }
+                }
+            }
+            else if (response?.data) {
+                console.warn(`[Creatives] Unexpected adimages response format:`, typeof response.data);
+            }
+            return results;
+        }
+        catch (error) {
+            console.error(`[Creatives] Error batch fetching image URLs:`, error.message || error);
+            // Fallback to individual fetches
+            const results = [];
+            for (const hash of imageHashes) {
+                try {
+                    const imageData = await this.fetchImageUrlFromHash(hash, adAccountId, accessToken);
+                    if (imageData.url) {
+                        results.push({
+                            url: imageData.url,
+                            hash,
+                            width: imageData.width,
+                            height: imageData.height
+                        });
+                    }
+                }
+                catch (err) {
+                    console.error(`[Creatives] Failed to fetch image for hash ${hash}:`, err.message);
+                }
+            }
+            return results;
         }
     }
     /**
@@ -117,8 +142,17 @@ export class CreativesService {
      */
     async fetchVideoDetails(videoId, accessToken) {
         try {
-            const fields = 'source,picture,length,thumbnails.limit(1){uri,width,height,scale,is_preferred}';
+            const fields = 'source,picture,length,thumbnails.limit(1){uri,width,height,scale,is_preferred},permalink_url,embed_html';
             const videoData = await fbGet(`/${videoId}`, { fields }, accessToken);
+            console.log(`[Creatives] Video API Response for ${videoId}:`, JSON.stringify({
+                id: videoId,
+                hasSource: !!videoData.source,
+                sourceType: typeof videoData.source,
+                sourcePreview: videoData.source ? videoData.source.substring(0, 100) + '...' : null,
+                hasPicture: !!videoData.picture,
+                hasPermalink: !!videoData.permalink_url,
+                hasEmbedHtml: !!videoData.embed_html
+            }, null, 2));
             // Get the highest quality thumbnail available
             let highQualityThumbnail = videoData.picture;
             if (videoData.thumbnails?.data?.length > 0) {
@@ -202,72 +236,67 @@ export class CreativesService {
      * Parse and normalize creative data from Facebook API
      */
     async parseCreativeData(creativeData, adAccountId, accessToken) {
+        console.log(`\n[Creatives] Processing creative ${creativeData.id}`);
         const oss = creativeData.object_story_spec || {};
         const linkData = oss.link_data || {};
         const photoData = oss.photo_data || {};
         const videoData = oss.video_data || {};
         const assetFeedSpec = creativeData.asset_feed_spec || {};
-        // Determine creative type
-        let creativeType = 'other';
-        const videoId = videoData.video_id || creativeData.video_id || null;
-        if (videoId) {
+        // STEP 1: Check if this is a dynamic creative
+        const isDynamic = this.isDynamicCreative(creativeData);
+        // STEP 2: Normal type detection and enrichment
+        // NEW SIMPLIFIED LOGIC
+        // 1. Check for video_id (top level to determine type, but fetch using object_story_spec)
+        const topLevelVideoId = creativeData.video_id || null;
+        const videoId = videoData.video_id || topLevelVideoId || null; // Prefer object_story_spec for fetching
+        // 2. Check for image_url (top level)
+        const imageUrl = creativeData.image_url || null;
+        // 3. Check for carousel (child_attachments with image_hash)
+        const childAttachments = (linkData.child_attachments || []).map((child) => ({
+            name: child.name || null,
+            description: child.description || null,
+            imageUrl: child.image_url || null,
+            imageHash: child.image_hash || null,
+            link: child.link || null,
+            videoId: child.video_id || null
+        }));
+        const hasCarouselImages = childAttachments.some((child) => child.imageHash);
+        // Determine creative type based on new logic
+        let creativeType = 'dynamic';
+        // Check if video exists - either top-level OR in object_story_spec.video_data
+        const hasVideo = !!(topLevelVideoId || videoId);
+        if (hasVideo) {
+            // Priority 1: Video (if video_id exists at any level - top-level or object_story_spec)
             creativeType = 'video';
+            console.log(`[Creatives] Type: VIDEO (top-level video_id: ${topLevelVideoId || 'none'}, object_story_spec video_id: ${videoId || 'none'})`);
         }
-        else if (linkData.child_attachments && linkData.child_attachments.length > 0) {
-            creativeType = 'carousel';
-        }
-        else if (photoData.image_hash || creativeData.image_hash || creativeData.image_url) {
+        else if (imageUrl) {
+            // Priority 2: Image (if image_url exists and no video_id)
             creativeType = 'image';
+            console.log(`[Creatives] Type: IMAGE (image_url: ${imageUrl})`);
         }
-        else if (Object.keys(assetFeedSpec).length > 0) {
-            // Advantage+ Creative / Dynamic Format - has asset_feed_spec
-            // Only classify based on ad_formats if actual media data exists
-            const adFormats = assetFeedSpec.ad_formats || [];
-            const assetImages = assetFeedSpec.images || [];
-            const assetVideos = assetFeedSpec.videos || [];
-            if (adFormats.includes('SINGLE_VIDEO') && assetVideos.length > 0) {
-                creativeType = 'video'; // Advantage+ video with actual video data
-            }
-            else if (adFormats.includes('CAROUSEL')) {
-                creativeType = 'carousel'; // Advantage+ carousel
-            }
-            else if (adFormats.includes('SINGLE_IMAGE') && assetImages.length > 0) {
-                creativeType = 'image'; // Advantage+ single image with actual image data
+        else if (!imageUrl && hasCarouselImages) {
+            // Priority 3: Carousel (no image_url, no video_id, but has image hashes in child_attachments)
+            creativeType = 'carousel';
+            console.log(`[Creatives] Type: CAROUSEL (${childAttachments.length} items)`);
+        }
+        else {
+            // Priority 4: Dynamic type based on what data exists
+            if (assetFeedSpec && Object.keys(assetFeedSpec).length > 0) {
+                creativeType = 'dynamic'; // Advantage+ or dynamic creative
+                console.log(`[Creatives] Type: DYNAMIC (has asset_feed_spec)`);
             }
             else {
-                // Default for Advantage+ without clear media - will be validated later
-                creativeType = 'other';
-            }
-        }
-        else if (linkData.link) {
-            creativeType = 'link';
-        }
-        // For creatives without direct image_url (Advantage+, other types, or links), fetch high-quality from post
-        let highQualityImages = {
-            imageUrl: null,
-            thumbnailUrl: null
-        };
-        const effectiveStoryId = creativeData.effective_object_story_id || creativeData.object_story_id;
-        const hasDirectImageUrl = creativeData.image_url || photoData.url;
-        // Fetch high-quality images if:
-        // 1. We have an effective_object_story_id AND
-        // 2. Either no direct image URL OR it's an Advantage+ creative (has asset_feed_spec)
-        if (effectiveStoryId && (!hasDirectImageUrl || Object.keys(assetFeedSpec).length > 0)) {
-            try {
-                highQualityImages = await this.fetchPostAttachments(effectiveStoryId, accessToken);
-                // If we found high-quality images and type was 'other', reclassify as 'image'
-                if (highQualityImages.imageUrl && creativeType === 'other') {
-                    creativeType = 'image';
-                }
-            }
-            catch (error) {
-                console.log(`[Creatives] Could not fetch post attachments (may need additional permissions): ${error.message}`);
-                // Continue without high-quality images - use fallback
+                creativeType = 'dynamic';
+                console.log(`[Creatives] Type: DYNAMIC (no media found)`);
             }
         }
         // Fetch video details if video creative
         let videos = [];
+        let finalImageUrl = null;
+        let finalVideoUrl = null;
         if (videoId) {
+            console.log(`[Creatives] Fetching video details for ${videoId}...`);
             const videoDetails = await this.fetchVideoDetails(videoId, accessToken);
             if (videoDetails) {
                 const videoObject = {
@@ -277,21 +306,125 @@ export class CreativesService {
                     duration: videoDetails.length || null
                 };
                 videos = [videoObject];
+                finalVideoUrl = videoObject.url;
+                console.log(`[Creatives] Video URL: ${videoObject.url}`);
+                // Save thumbnail from video_data.image_url, fallback to video API picture
+                if (videoData?.image_url) {
+                    finalImageUrl = videoData.image_url;
+                    console.log(`[Creatives] Video thumbnail from video_data: ${finalImageUrl}`);
+                }
+                else if (videoDetails.picture) {
+                    finalImageUrl = videoDetails.picture;
+                    console.log(`[Creatives] Video thumbnail from video API: ${finalImageUrl}`);
+                }
+                else if (creativeData.thumbnail_url) {
+                    finalImageUrl = creativeData.thumbnail_url;
+                    console.log(`[Creatives] Video thumbnail from top-level: ${finalImageUrl}`);
+                }
             }
         }
-        // Parse carousel attachments
-        const childAttachments = (linkData.child_attachments || []).map((child) => ({
-            name: child.name || null,
-            description: child.description || null,
-            imageUrl: child.image_url || null,
-            imageHash: child.image_hash || null,
-            link: child.link || null,
-            videoId: child.video_id || null
-        }));
+        // For image type, use top-level image_url
+        if (creativeType === 'image' && imageUrl) {
+            finalImageUrl = imageUrl;
+            console.log(`[Creatives] Image URL: ${finalImageUrl}`);
+        }
+        // Fetch carousel images from hashes
+        let carouselImages = [];
+        if (creativeType === 'carousel' && hasCarouselImages) {
+            console.log(`[Creatives] Fetching carousel images from hashes...`);
+            // Extract all hashes from child_attachments first
+            const carouselHashes = childAttachments
+                .map((child) => child.imageHash)
+                .filter(Boolean);
+            if (carouselHashes.length > 0) {
+                // Batch fetch all image URLs in one API call
+                const imageUrls = await this.fetchImageUrlsFromHashes(carouselHashes, adAccountId, accessToken);
+                // Build carouselImages array by matching fetched URLs to child_attachments
+                const hashToUrlMap = new Map(imageUrls.map(img => [img.hash, img]));
+                for (const child of childAttachments) {
+                    if (child.imageHash) {
+                        const imageData = hashToUrlMap.get(child.imageHash);
+                        if (imageData?.url) {
+                            carouselImages.push({
+                                url: imageData.url,
+                                hash: child.imageHash,
+                                name: child.name,
+                                description: child.description,
+                                link: child.link,
+                                width: imageData.width ?? undefined,
+                                height: imageData.height ?? undefined
+                            });
+                            console.log(`[Creatives] Carousel item ${carouselImages.length}: ${imageData.url}`);
+                        }
+                    }
+                }
+            }
+            console.log(`[Creatives] Fetched ${carouselImages.length} carousel images`);
+        }
+        // Handle dynamic creative image hash resolution
+        let dynamicImages = [];
+        if (isDynamic) {
+            // Check for asset_feed_spec.images first
+            if (assetFeedSpec?.images?.length > 0 && !assetFeedSpec.products) {
+                console.log(`[Creatives] Processing dynamic creative with asset_feed_spec.images...`);
+                // First, check if images already have URLs in the response (no API call needed)
+                const imagesWithUrls = assetFeedSpec.images
+                    .filter((img) => img.url && img.hash)
+                    .map((img) => ({
+                    url: img.url,
+                    hash: img.hash,
+                    width: img.width ?? undefined,
+                    height: img.height ?? undefined
+                }));
+                // Extract hashes that need fetching (no URL present in response)
+                const hashesNeedingFetch = (assetFeedSpec.images || [])
+                    .filter((img) => img.hash && !img.url)
+                    .map((img) => String(img.hash))
+                    .filter((hash) => Boolean(hash));
+                const uniqueHashesNeedingFetch = [...new Set(hashesNeedingFetch)];
+                console.log(`[Creatives] Found ${imagesWithUrls.length} images with URLs, ${uniqueHashesNeedingFetch.length} hashes need fetching`);
+                // Fetch missing URLs via batch method
+                if (uniqueHashesNeedingFetch.length > 0) {
+                    const fetchedUrls = await this.fetchImageUrlsFromHashes(uniqueHashesNeedingFetch, adAccountId, accessToken);
+                    dynamicImages = [
+                        ...imagesWithUrls,
+                        ...fetchedUrls.map(img => ({
+                            url: img.url,
+                            hash: img.hash,
+                            width: img.width ?? undefined,
+                            height: img.height ?? undefined
+                        }))
+                    ];
+                }
+                else {
+                    dynamicImages = imagesWithUrls;
+                }
+                console.log(`[Creatives] Total dynamic creative images: ${dynamicImages.length} (${imagesWithUrls.length} from response, ${dynamicImages.length - imagesWithUrls.length} fetched)`);
+            }
+            // Also check for top-level imageHash (fallback for dynamic creatives without asset_feed_spec.images)
+            if (dynamicImages.length === 0 && creativeData.image_hash) {
+                console.log(`[Creatives] Dynamic creative has top-level imageHash, fetching...`);
+                try {
+                    const imageData = await this.fetchImageUrlFromHash(creativeData.image_hash, adAccountId, accessToken);
+                    if (imageData.url) {
+                        dynamicImages = [{
+                                url: imageData.url,
+                                hash: creativeData.image_hash,
+                                width: imageData.width ?? undefined,
+                                height: imageData.height ?? undefined
+                            }];
+                        console.log(`[Creatives] Fetched dynamic creative image from top-level imageHash`);
+                    }
+                }
+                catch (error) {
+                    console.error(`[Creatives] Failed to fetch image from top-level imageHash:`, error.message);
+                }
+            }
+        }
         // Extract data from asset_feed_spec (Advantage+ Creative)
         let assetFeedData = null;
         if (Object.keys(assetFeedSpec).length > 0) {
-            // Extract first image hash from asset_feed_spec
+            // Extract first image hash from asset_feed_spec (for imageHash field)
             const assetImages = assetFeedSpec.images || [];
             const firstImageHash = assetImages[0]?.hash || null;
             // Extract first body text
@@ -316,97 +449,21 @@ export class CreativesService {
         }
         // Parse call to action - prioritize asset_feed_spec, then other sources
         const callToAction = assetFeedData?.callToAction || creativeData.call_to_action || linkData.call_to_action || videoData.call_to_action || null;
-        console.log(`\n[🔍 IMAGES] Starting image resolution for creative ${creativeData.id}`);
-        // Step 2: Get all possible sources
-        let finalImageUrl = highQualityImages.imageUrl ||
-            creativeData.image_url ||
-            photoData.url ||
-            linkData.picture ||
-            null;
-        let finalThumbnailUrl = highQualityImages.thumbnailUrl ||
-            creativeData.thumbnail_url ||
-            null;
-        let finalImageHash = creativeData.image_hash ||
-            photoData.image_hash ||
-            assetFeedData?.imageHash ||
-            null;
-        console.log(`[IMAGES] After initial sources:`, {
+        // Simple image/thumbnail extraction
+        const finalThumbnailUrl = creativeData.thumbnail_url || null;
+        // For dynamic creatives, use first hash from images array, otherwise use other sources
+        const finalImageHash = isDynamic && dynamicImages.length > 0
+            ? dynamicImages[0].hash
+            : (creativeData.image_hash || photoData.image_hash || assetFeedData?.imageHash || null);
+        console.log(`[Creatives] Final data:`, {
+            type: creativeType,
             imageUrl: finalImageUrl,
+            videoUrl: finalVideoUrl,
             thumbnailUrl: finalThumbnailUrl,
             imageHash: finalImageHash,
-            sources: {
-                highQualityImageUrl: highQualityImages.imageUrl,
-                directImageUrl: creativeData.image_url,
-                photoDataUrl: photoData.url,
-                linkDataPicture: linkData.picture,
-                directThumbnail: creativeData.thumbnail_url
-            }
+            videoId: videoId,
+            childAttachmentsCount: childAttachments.length
         });
-        // Step 3: If we have hash, fetch from hash
-        if (finalImageHash) {
-            console.log(`[IMAGES] Have hash ${finalImageHash}, fetching...`);
-            const hashResult = await this.fetchImageUrlFromHash(finalImageHash, adAccountId, accessToken);
-            if (hashResult.url) {
-                if (!finalImageUrl) {
-                    finalImageUrl = hashResult.url;
-                }
-                if (!finalThumbnailUrl) {
-                    finalThumbnailUrl = hashResult.url;
-                }
-            }
-        }
-        // Step 4: Transform thumbnail to high-res if no imageUrl
-        if (!finalImageUrl && finalThumbnailUrl) {
-            console.log(`[IMAGES] No imageUrl but have thumbnail, attempting transformation...`);
-            const highResFromThumbnail = this.getHighResImageUrl(finalThumbnailUrl);
-            if (highResFromThumbnail !== finalThumbnailUrl) {
-                finalImageUrl = highResFromThumbnail;
-            }
-        }
-        // Step 5: Transform URLs if they're Facebook CDN
-        if (finalImageUrl && finalImageUrl.includes('fbcdn.net')) {
-            finalImageUrl = this.getHighResImageUrl(finalImageUrl);
-        }
-        if (finalThumbnailUrl && finalThumbnailUrl.includes('fbcdn.net')) {
-            finalThumbnailUrl = this.getHighResImageUrl(finalThumbnailUrl);
-        }
-        console.log(`[IMAGES] FINAL RESULT:`, {
-            imageUrl: finalImageUrl,
-            thumbnailUrl: finalThumbnailUrl,
-            imageHash: finalImageHash,
-            creativeType
-        });
-        // VALIDATION: Ensure we have actual media for the classified type
-        // This must happen BEFORE returning the object to prevent saving invalid data
-        // If classified as video but no video data retrieved, downgrade to other
-        if (creativeType === 'video' && (!videoId || videos.length === 0)) {
-            creativeType = 'other';
-        }
-        // If classified as image but no actual image URL, thumbnail, or hash, downgrade to other
-        if (creativeType === 'image' && !finalImageUrl && !finalThumbnailUrl && !finalImageHash) {
-            console.log(`[Creatives] ❌ Creative ${creativeData.id}: Classified as image but no image data at all (no URL, thumbnail, or hash), changing to 'other'`);
-            creativeType = 'other';
-        }
-        // Warn if image type but missing URL (even with hash)
-        if (creativeType === 'image' && !finalImageUrl && !finalThumbnailUrl) {
-            console.warn(`[Creatives] ⚠️ Creative ${creativeData.id}: Type 'image' but no image URL/thumbnail (hash: ${finalImageHash || 'none'})`);
-        }
-        // If classified as carousel but no child attachments, downgrade to other
-        if (creativeType === 'carousel' && childAttachments.length === 0) {
-            console.log(`[Creatives] ❌ Creative ${creativeData.id}: Classified as carousel but no child attachments found, changing to 'other'`);
-            creativeType = 'other';
-        }
-        // Get text content for final validation
-        const hasPrimaryText = assetFeedData?.primaryText || creativeData.body || linkData.message || photoData.message || videoData.message;
-        const hasHeadline = assetFeedData?.headline || creativeData.title || linkData.name;
-        const hasDescription = assetFeedData?.description || linkData.description;
-        const hasTextContent = hasPrimaryText || hasHeadline || hasDescription;
-        // Log warning if 'other' type with no content at all
-        if (creativeType === 'other') {
-            if (!hasTextContent && !finalImageUrl && !finalThumbnailUrl && !finalImageHash) {
-                console.warn(`[Creatives] ⚠️ Creative ${creativeData.id}: Type 'other' with NO content at all (no text, no images)`);
-            }
-        }
         return {
             creativeId: creativeData.id,
             adAccountId,
@@ -419,11 +476,12 @@ export class CreativesService {
             imageUrl: finalImageUrl,
             imageHash: finalImageHash,
             videoId,
-            images: [],
+            images: isDynamic ? dynamicImages : carouselImages, // Use dynamic images if dynamic, else carousel
             videos,
             childAttachments,
             callToAction,
-            creativeType,
+            creativeType: isDynamic ? 'dynamic' : creativeType,
+            isDynamic: isDynamic,
             objectStorySpec: oss,
             rawData: creativeData,
             lastFetchedAt: new Date()
@@ -505,6 +563,132 @@ export class CreativesService {
         }
         console.log(`[Creatives] Total creatives available: ${Object.keys(cachedMap).length}`);
         return cachedMap;
+    }
+    /**
+     * Smart refresh creative URLs from Facebook based on type
+     * Only fetches what's needed (video URL, carousel images, preview iframe, or full creative)
+     */
+    async refreshCreativeUrls(creativeId, adAccountId, accessToken) {
+        console.log(`[Creatives] Smart refresh for creative ${creativeId}`);
+        // Get existing creative from DB to determine strategy
+        const existing = await creativesRepository.getCreativeById(creativeId);
+        if (!existing) {
+            console.log(`[Creatives] Creative ${creativeId} not in DB, doing full fetch`);
+            return this.getCreative(creativeId, adAccountId, accessToken, true);
+        }
+        const creativeType = existing.creativeType;
+        const isDynamic = existing.isDynamic || false;
+        console.log(`[Creatives] Creative type: ${creativeType}, isDynamic: ${isDynamic}`);
+        try {
+            // Handle dynamic creative image refresh
+            if (isDynamic || creativeType === 'dynamic') {
+                // Extract hashes from images[] array and refresh URLs
+                const imageHashes = existing.images
+                    ?.map((img) => img.hash || img.imageHash)
+                    .filter(Boolean) || [];
+                if (imageHashes.length > 0) {
+                    console.log(`[Creatives] Refreshing ${imageHashes.length} dynamic creative images...`);
+                    const imageUrls = await this.fetchImageUrlsFromHashes(imageHashes, adAccountId, accessToken);
+                    if (imageUrls.length > 0) {
+                        const updates = {
+                            images: imageUrls.map(img => ({
+                                url: img.url,
+                                hash: img.hash,
+                                width: img.width ?? undefined,
+                                height: img.height ?? undefined
+                            })),
+                            lastFetchedAt: new Date()
+                        };
+                        const updated = await creativesRepository.updateCreative(creativeId, updates);
+                        console.log(`[Creatives] Dynamic images refreshed: ${imageUrls.length}/${imageHashes.length}`);
+                        return updated;
+                    }
+                }
+                // If no hashes, do full fetch
+                console.log(`[Creatives] No image hashes stored, doing full fetch`);
+                return this.getCreative(creativeId, adAccountId, accessToken, true);
+            }
+            // At this point, creativeType is narrowed to 'image' | 'video' | 'carousel'
+            switch (creativeType) {
+                case 'video': {
+                    // Lightweight refresh: only fetch video URL from video_id
+                    if (!existing.videoId) {
+                        console.log(`[Creatives] No videoId stored, doing full fetch`);
+                        return this.getCreative(creativeId, adAccountId, accessToken, true);
+                    }
+                    console.log(`[Creatives] Refreshing video URL for video_id: ${existing.videoId}`);
+                    const videoDetails = await this.fetchVideoDetails(existing.videoId, accessToken);
+                    if (videoDetails) {
+                        // Update video URL and thumbnail
+                        const updatedVideos = [{
+                                id: existing.videoId,
+                                url: videoDetails.source || null,
+                                thumbnailUrl: videoDetails.picture || null,
+                                duration: videoDetails.length || null
+                            }];
+                        const updates = {
+                            videos: updatedVideos,
+                            imageUrl: videoDetails.picture || existing.imageUrl, // Update thumbnail
+                            lastFetchedAt: new Date()
+                        };
+                        const updated = await creativesRepository.updateCreative(creativeId, updates);
+                        console.log(`[Creatives] Video URL refreshed successfully`);
+                        return updated;
+                    }
+                    break;
+                }
+                case 'carousel': {
+                    // Lightweight refresh: only fetch carousel images from hashes stored in images[] array
+                    const imageHashes = existing.images
+                        ?.map((img) => img.hash || img.imageHash)
+                        .filter(Boolean) || [];
+                    if (imageHashes.length === 0) {
+                        console.log(`[Creatives] No image hashes stored, doing full fetch`);
+                        return this.getCreative(creativeId, adAccountId, accessToken, true);
+                    }
+                    console.log(`[Creatives] Refreshing ${imageHashes.length} carousel images`);
+                    const imageUrls = await this.fetchImageUrlsFromHashes(imageHashes, adAccountId, accessToken);
+                    if (imageUrls.length > 0) {
+                        // Preserve childAttachment metadata if available
+                        const carouselImages = imageUrls.map((img, i) => {
+                            const childAttachment = existing.childAttachments?.[i] || {};
+                            return {
+                                url: img.url,
+                                hash: img.hash,
+                                width: img.width ?? undefined,
+                                height: img.height ?? undefined,
+                                name: childAttachment.name || null,
+                                description: childAttachment.description || null,
+                                link: childAttachment.link || null
+                            };
+                        });
+                        const updates = {
+                            images: carouselImages,
+                            lastFetchedAt: new Date()
+                        };
+                        const updated = await creativesRepository.updateCreative(creativeId, updates);
+                        console.log(`[Creatives] Carousel images refreshed: ${carouselImages.length}/${imageHashes.length}`);
+                        return updated;
+                    }
+                    break;
+                }
+                case 'image':
+                default: {
+                    // Full refresh: image URLs come from creative endpoint
+                    // Note: 'dynamic' is handled above, this handles 'image' and any other types
+                    console.log(`[Creatives] Doing full fetch for type: ${creativeType}`);
+                    return this.getCreative(creativeId, adAccountId, accessToken, true);
+                }
+            }
+            // Fallback to full fetch if lightweight refresh failed
+            console.log(`[Creatives] Lightweight refresh failed, doing full fetch`);
+            return this.getCreative(creativeId, adAccountId, accessToken, true);
+        }
+        catch (error) {
+            console.error(`[Creatives] Error in smart refresh:`, error.message);
+            // Fallback to full fetch on error
+            return this.getCreative(creativeId, adAccountId, accessToken, true);
+        }
     }
     /**
      * Fetch and save all creatives for ads in a date range
