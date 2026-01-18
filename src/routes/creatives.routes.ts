@@ -11,6 +11,12 @@ const creativesController = new CreativesController();
 router.post('/fetch-and-save', creativesController.fetchAndSaveCreatives);
 
 /**
+ * POST /api/v1/creatives/:creativeId/refresh
+ * Refresh a creative by fetching latest data from Facebook (for broken/expired URLs)
+ */
+router.post('/:creativeId/refresh', creativesController.refreshCreative);
+
+/**
  * GET /api/v1/creatives/:creativeId
  * Get a single creative by ID
  */

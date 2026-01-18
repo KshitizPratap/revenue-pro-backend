@@ -32,15 +32,22 @@ export class CreativesRepository {
      */
     async upsertCreative(creativeData) {
         console.log(`[CreativesRepository] Upserting creative ${creativeData.creativeId}:`, {
-            creativeType: creativeData.creativeType,
-            hasVideos: !!creativeData.videos,
-            videosLength: creativeData.videos?.length,
-            videos: creativeData.videos
+            creativeMode: creativeData.creativeMode,
+            mediaType: creativeData.mediaType,
+            hasVideos: creativeData.videoIds && creativeData.videoIds.length > 0,
+            videosLength: creativeData.videoIds?.length || 0
         });
         const updated = await CreativeModel.findOneAndUpdate({ creativeId: creativeData.creativeId }, { $set: creativeData }, { upsert: true, new: true });
         const result = updated.toObject();
-        console.log(`[CreativesRepository] Saved creative ${result.creativeId} with videos:`, result.videos);
+        console.log(`[CreativesRepository] Saved creative ${result.creativeId} with ${result.videoIds?.length || 0} videos`);
         return result;
+    }
+    /**
+     * Update specific fields of a creative (for lightweight URL refreshes)
+     */
+    async updateCreative(creativeId, updates) {
+        const updated = await CreativeModel.findOneAndUpdate({ creativeId, isDeleted: false }, { $set: updates }, { new: true });
+        return updated ? updated.toObject() : null;
     }
     /**
      * Save or update multiple creatives

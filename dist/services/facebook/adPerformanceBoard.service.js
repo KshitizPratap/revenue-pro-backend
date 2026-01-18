@@ -1,54 +1,102 @@
 import { leadRepository } from '../leads/repository/LeadRepository.js';
 import { fbWeeklyAnalyticsRepository } from './repository/FbWeeklyAnalyticsRepository.js';
 import { creativesRepository } from '../creatives/repository/CreativesRepository.js';
+import { creativesService } from '../creatives/service/CreativesService.js';
+import { facebookCredentialsService } from './facebookCredentialsService.js';
 import { calculateEstimateSetCount, calculateUnqualifiedCount, calculateEstimateSetRate, isEstimateSetStatus } from '../leads/utils/estimateSetConstants.js';
-export async function getAdPerformanceBoard(params) {
-    const { clientId, filters, columns, groupBy } = params;
-    // Fetch saved weekly analytics from database
-    const savedAnalytics = await fbWeeklyAnalyticsRepository.getAnalyticsByDateRange(clientId, filters.startDate, filters.endDate);
-    if (savedAnalytics.length === 0) {
-        return {
-            rows: [],
-            averages: {
-                fb_frequency: 0,
-                fb_ctr: 0,
-                fb_unique_ctr: 0,
-                fb_cpc: 0,
-                fb_cpm: 0,
-                fb_cpr: 0,
-                fb_cost_per_conversion: 0,
-                fb_cost_per_lead: 0,
-                costPerLead: 0,
-                costPerEstimateSet: 0,
-                costPerJobBooked: 0,
-                costOfMarketingPercent: 0,
-                estimateSetRate: 0,
-            },
-            availableZipCodes: [],
-            availableServiceTypes: []
-        };
-    }
-    // Step 1.5: Fetch creatives from creatives collection
+/**
+ * Returns empty response structure
+ */
+function getEmptyResponse() {
+    return {
+        rows: [],
+        averages: {
+            fb_frequency: 0,
+            fb_ctr: 0,
+            fb_unique_ctr: 0,
+            fb_cpc: 0,
+            fb_cpm: 0,
+            fb_cpr: 0,
+            fb_cost_per_conversion: 0,
+            fb_cost_per_lead: 0,
+            costPerLead: 0,
+            costPerEstimateSet: 0,
+            costPerJobBooked: 0,
+            costOfMarketingPercent: 0,
+            estimateSetRate: 0,
+            holdRate: null,
+            costPerLinkClick: null,
+            averageJobSize: null,
+            resultRate: null,
+        },
+        availableZipCodes: [],
+        availableServiceTypes: []
+    };
+}
+/**
+ * Fetch and enrich creatives from database and Facebook API
+ */
+async function fetchAndEnrichCreatives(savedAnalytics, clientId) {
     const creativeIds = savedAnalytics
         .map(a => a.creative?.id)
         .filter((id) => !!id);
     const uniqueCreativeIds = Array.from(new Set(creativeIds));
     let creativesMap = {};
-    if (uniqueCreativeIds.length > 0) {
-        try {
-            const creatives = await creativesRepository.getCreativesByIds(uniqueCreativeIds);
-            creatives.forEach(c => {
-                creativesMap[c.creativeId] = c;
-            });
-            console.log(`[AdPerformanceBoard] Loaded ${Object.keys(creativesMap).length} creatives from database`);
-        }
-        catch (error) {
-            console.error('[AdPerformanceBoard] Failed to load creatives:', error);
-            // Continue without enriched creative data
+    if (uniqueCreativeIds.length === 0) {
+        return creativesMap;
+    }
+    try {
+        // Fetch existing creatives from database
+        const creatives = await creativesRepository.getCreativesByIds(uniqueCreativeIds);
+        creatives.forEach(c => {
+            creativesMap[c.creativeId] = c;
+        });
+        console.log(`[AdPerformanceBoard] Loaded ${Object.keys(creativesMap).length} creatives from database`);
+        // Identify missing creatives (not found in database)
+        const missingCreativeIds = uniqueCreativeIds.filter(id => !creativesMap[id]);
+        // If there are missing creatives, fetch them from Facebook API
+        if (missingCreativeIds.length > 0) {
+            console.log(`[AdPerformanceBoard] Found ${missingCreativeIds.length} missing creatives, fetching from Facebook...`);
+            // Get Facebook credentials using shared service
+            const credentials = await facebookCredentialsService.getCredentials(clientId);
+            if (credentials) {
+                // Fetch missing creatives in parallel (with batch size limit to avoid rate limits)
+                const BATCH_SIZE = 10;
+                for (let i = 0; i < missingCreativeIds.length; i += BATCH_SIZE) {
+                    const batch = missingCreativeIds.slice(i, i + BATCH_SIZE);
+                    await Promise.all(batch.map(async (creativeId) => {
+                        try {
+                            const creative = await creativesService.getCreative(creativeId, credentials.adAccountId, credentials.accessToken, false // Use cache if available, but we know it's not in DB
+                            );
+                            if (creative) {
+                                creativesMap[creativeId] = creative;
+                                console.log(`[AdPerformanceBoard] Fetched and cached creative ${creativeId} from Facebook`);
+                            }
+                        }
+                        catch (error) {
+                            // Log error but don't block - continue with other creatives
+                            console.error(`[AdPerformanceBoard] Failed to fetch creative ${creativeId} from Facebook:`, error.message || error);
+                        }
+                    }));
+                }
+                console.log(`[AdPerformanceBoard] Successfully fetched ${Object.keys(creativesMap).length - creatives.length} creatives from Facebook`);
+            }
+            else {
+                console.warn(`[AdPerformanceBoard] Cannot fetch missing creatives: Facebook credentials not available`);
+            }
         }
     }
-    // Map DB fields (camelCase) to EnrichedAd interface (snake_case)
-    const enrichedAds = savedAnalytics.map((analytics) => {
+    catch (error) {
+        console.error('[AdPerformanceBoard] Failed to load creatives:', error);
+        // Continue without enriched creative data
+    }
+    return creativesMap;
+}
+/**
+ * Map DB analytics to EnrichedAd interface
+ */
+function mapAnalyticsToEnrichedAds(savedAnalytics, creativesMap) {
+    return savedAnalytics.map((analytics) => {
         const creativeId = analytics.creative?.id;
         const enrichedCreative = creativeId ? creativesMap[creativeId] : null;
         return {
@@ -64,19 +112,27 @@ export async function getAdPerformanceBoard(params) {
                 primary_text: enrichedCreative?.primaryText || analytics.creative.primaryText || null,
                 headline: enrichedCreative?.headline || analytics.creative.headline || null,
                 raw: analytics.creative.raw || null,
-                // Add enriched creative data from creatives collection
+                // Add enriched creative data from creatives collection (new schema)
                 ...(enrichedCreative && {
                     thumbnailUrl: enrichedCreative.thumbnailUrl,
-                    imageUrl: enrichedCreative.imageUrl,
-                    imageHash: enrichedCreative.imageHash,
-                    videoId: enrichedCreative.videoId,
-                    creativeType: enrichedCreative.creativeType,
-                    images: enrichedCreative.images,
-                    videos: enrichedCreative.videos,
-                    childAttachments: enrichedCreative.childAttachments,
-                    callToAction: enrichedCreative.callToAction,
                     description: enrichedCreative.description,
                     body: enrichedCreative.body,
+                    // New schema fields (arrays)
+                    imageUrls: enrichedCreative.imageUrls || [],
+                    imageHashes: enrichedCreative.imageHashes || [],
+                    videoIds: enrichedCreative.videoIds || [],
+                    videoUrls: enrichedCreative.videoUrls || [],
+                    previewIframe: enrichedCreative.previewIframe || [],
+                    // Creative classification
+                    creativeMode: enrichedCreative.creativeMode,
+                    mediaType: enrichedCreative.mediaType,
+                    // Carousel and CTA
+                    childAttachments: enrichedCreative.childAttachments || [],
+                    callToAction: enrichedCreative.callToAction,
+                    // Legacy fields for backward compatibility (first item from arrays)
+                    imageUrl: enrichedCreative.imageUrls?.[0],
+                    imageHash: enrichedCreative.imageHashes?.[0],
+                    videoId: enrichedCreative.videoIds?.[0],
                 })
             } : null,
             lead_form: analytics.leadForm ? {
@@ -95,8 +151,12 @@ export async function getAdPerformanceBoard(params) {
             _optimizationGoal: analytics.optimizationGoal,
         };
     });
-    // Step 2: Fetch leads from database
-    const allLeads = await leadRepository.getLeadsByDateRangeAndClientId(clientId, filters.startDate, filters.endDate);
+}
+/**
+ * Fetch leads and extract available filter options
+ */
+async function fetchLeadsAndExtractOptions(clientId, startDate, endDate) {
+    const allLeads = await leadRepository.getLeadsByDateRangeAndClientId(clientId, startDate, endDate);
     // Collect all unique zip codes and service types from leads for filtering options
     const uniqueZipCodes = new Set();
     const uniqueServiceTypes = new Set();
@@ -108,9 +168,16 @@ export async function getAdPerformanceBoard(params) {
             uniqueServiceTypes.add(lead.service);
         }
     });
-    const availableZipCodes = Array.from(uniqueZipCodes).sort();
-    const availableServiceTypes = Array.from(uniqueServiceTypes).sort();
-    // Step 3: Apply lead filters
+    return {
+        allLeads,
+        availableZipCodes: Array.from(uniqueZipCodes).sort(),
+        availableServiceTypes: Array.from(uniqueServiceTypes).sort()
+    };
+}
+/**
+ * Apply lead filters based on BoardFilters
+ */
+function applyLeadFilters(allLeads, filters) {
     let filteredLeads = allLeads;
     if (filters.estimateSetLeads === true) {
         filteredLeads = filteredLeads.filter((lead) => isEstimateSetStatus(lead.status));
@@ -139,8 +206,13 @@ export async function getAdPerformanceBoard(params) {
             return true;
         });
     }
-    // Step 4: Apply ad-level filters
-    let filteredAds = enrichedAds;
+    return filteredLeads;
+}
+/**
+ * Apply ad-level filters
+ */
+function applyAdFilters(ads, filters) {
+    let filteredAds = ads;
     if (filters.campaignName) {
         const campaigns = Array.isArray(filters.campaignName)
             ? filters.campaignName
@@ -183,93 +255,113 @@ export async function getAdPerformanceBoard(params) {
             });
         });
     }
-    // Step 5: BUILD THE MAPS (ad name → campaign/adset)
+    return filteredAds;
+}
+/**
+ * Build maps for ad name to campaign/adset lookup
+ */
+function buildAdNameMaps(ads) {
     const adNameToCampaignMap = new Map();
     const adNameToAdSetMap = new Map();
-    filteredAds.forEach((ad) => {
+    ads.forEach((ad) => {
         adNameToCampaignMap.set(ad.ad_name, ad.campaign_name);
         adNameToAdSetMap.set(ad.ad_name, ad.adset_name);
     });
-    // Step 6: Build aggregation map
-    const aggregationMap = new Map();
-    // First, process ads to get spend data
-    filteredAds.forEach((ad) => {
-        let groupKey;
-        let rowData = {};
-        switch (groupBy) {
-            case 'campaign':
-                groupKey = ad.campaign_name || 'Unknown Campaign';
-                rowData.campaignName = ad.campaign_name;
-                break;
-            case 'adset':
-                groupKey = `${ad.campaign_name}|${ad.adset_name}`;
-                rowData.campaignName = ad.campaign_name;
-                rowData.adSetName = ad.adset_name;
-                break;
-            case 'ad':
-                groupKey = `${ad.campaign_name}|${ad.adset_name}|${ad.ad_name}`;
-                rowData.campaignName = ad.campaign_name;
-                rowData.adSetName = ad.adset_name;
-                rowData.adName = ad.ad_name;
-                // Include creative data and optimization goal when grouping by ad
-                if (ad.creative) {
-                    rowData.creative = ad.creative;
-                }
-                if (ad._optimizationGoal) {
-                    rowData.optimizationGoal = ad._optimizationGoal;
-                }
-                break;
-            default:
-                groupKey = ad.ad_name || 'Unknown Ad';
+    return { adNameToCampaignMap, adNameToAdSetMap };
+}
+/**
+ * Generate group key based on groupBy parameter
+ */
+function generateGroupKey(groupBy, campaignName, adSetName, adName) {
+    switch (groupBy) {
+        case 'campaign':
+            return campaignName || 'Unknown Campaign';
+        case 'adset':
+            return `${campaignName}|${adSetName}`;
+        case 'ad':
+            return `${campaignName}|${adSetName}|${adName}`;
+        default:
+            return adName || 'Unknown Ad';
+    }
+}
+/**
+ * Create initial aggregation row
+ */
+function createInitialAggregationRow(groupKey, groupBy, rowData) {
+    return {
+        ...rowData,
+        _groupKey: groupKey,
+        _totalSpend: 0,
+        _totalRevenue: 0,
+        _totalImpressions: 0,
+        _services: new Set(),
+        _zipCodes: new Set(),
+        _totalClicks: 0,
+        _totalUniqueClicks: 0,
+        _totalReach: 0,
+        _totalFrequency: 0,
+        _totalCtr: 0,
+        _totalUniqueClickThroughRate: 0,
+        _totalCostPerClick: 0,
+        _totalCostPerThousandImpressions: 0,
+        _totalCostPerThousandReach: 0,
+        _totalPostEngagements: 0,
+        _totalPostReactions: 0,
+        _totalPostComments: 0,
+        _totalPostShares: 0,
+        _totalPostSaves: 0,
+        _totalPageEngagements: 0,
+        _totalLinkClicks: 0,
+        _totalVideoViews: 0,
+        _totalVideoViews25: 0,
+        _totalVideoViews50: 0,
+        _totalVideoViews75: 0,
+        _totalVideoViews100: 0,
+        _totalVideoAvgWatchTime: 0,
+        _totalVideoPlayActions: 0,
+        _totalVideoContinuous2SecWatched: 0,
+        _totalVideoThruplayWatched: 0,
+        _totalConversions: 0,
+        _totalConversionValue: 0,
+        _totalCostPerConversion: 0,
+        _totalLeads: 0,
+        _totalCostPerLead: 0,
+        _count: 0,
+        numberOfLeads: 0,
+        numberOfEstimateSets: 0,
+        numberOfJobsBooked: 0,
+        numberOfUnqualifiedLeads: 0,
+        numberOfVirtualQuotes: 0,
+        numberOfEstimateCanceled: 0,
+        numberOfProposalPresented: 0,
+        numberOfJobLost: 0,
+    };
+}
+/**
+ * Aggregate ad metrics into aggregation map
+ */
+function aggregateAdMetrics(ads, aggregationMap, groupBy) {
+    ads.forEach((ad) => {
+        const groupKey = generateGroupKey(groupBy, ad.campaign_name, ad.adset_name, ad.ad_name);
+        const rowData = {};
+        if (groupBy === 'campaign' || groupBy === 'adset' || groupBy === 'ad') {
+            rowData.campaignName = ad.campaign_name;
+        }
+        if (groupBy === 'adset' || groupBy === 'ad') {
+            rowData.adSetName = ad.adset_name;
+        }
+        if (groupBy === 'ad') {
+            rowData.adName = ad.ad_name;
+            // Include creative data and optimization goal when grouping by ad
+            if (ad.creative) {
+                rowData.creative = ad.creative;
+            }
+            if (ad._optimizationGoal) {
+                rowData.optimizationGoal = ad._optimizationGoal;
+            }
         }
         if (!aggregationMap.has(groupKey)) {
-            aggregationMap.set(groupKey, {
-                ...rowData,
-                _groupKey: groupKey,
-                _totalSpend: 0,
-                _totalRevenue: 0,
-                _totalImpressions: 0,
-                _services: new Set(),
-                _zipCodes: new Set(),
-                _totalClicks: 0,
-                _totalUniqueClicks: 0,
-                _totalReach: 0,
-                _totalFrequency: 0,
-                _totalCtr: 0,
-                _totalUniqueClickThroughRate: 0,
-                _totalCostPerClick: 0,
-                _totalCostPerThousandImpressions: 0,
-                _totalCostPerThousandReach: 0,
-                _totalPostEngagements: 0,
-                _totalPostReactions: 0,
-                _totalPostComments: 0,
-                _totalPostShares: 0,
-                _totalPostSaves: 0,
-                _totalPageEngagements: 0,
-                _totalLinkClicks: 0,
-                _totalVideoViews: 0,
-                _totalVideoViews25: 0,
-                _totalVideoViews50: 0,
-                _totalVideoViews75: 0,
-                _totalVideoViews100: 0,
-                _totalVideoAvgWatchTime: 0,
-                _totalVideoPlayActions: 0,
-                _totalVideoContinuous2SecWatched: 0,
-                _totalConversions: 0,
-                _totalConversionValue: 0,
-                _totalCostPerConversion: 0,
-                _totalLeads: 0,
-                _totalCostPerLead: 0,
-                _count: 0,
-                numberOfLeads: 0,
-                numberOfEstimateSets: 0,
-                numberOfJobsBooked: 0,
-                numberOfUnqualifiedLeads: 0,
-                numberOfVirtualQuotes: 0,
-                numberOfEstimateCanceled: 0,
-                numberOfProposalPresented: 0,
-                numberOfJobLost: 0,
-            });
+            aggregationMap.set(groupKey, createInitialAggregationRow(groupKey, groupBy, rowData));
         }
         const row = aggregationMap.get(groupKey);
         const metrics = ad._fullMetrics || {};
@@ -279,7 +371,7 @@ export async function getAdPerformanceBoard(params) {
         row._totalClicks = (row._totalClicks || 0) + (metrics.clicks || 0);
         row._totalUniqueClicks = (row._totalUniqueClicks || 0) + (metrics.unique_clicks || 0);
         row._totalReach = (row._totalReach || 0) + (metrics.reach || 0);
-        // Sum pre-calculated metrics from DB (for averaging later)
+        // Sum pre-calculated metrics from DB
         row._totalFrequency = (row._totalFrequency || 0) + (metrics.frequency || 0);
         row._totalCtr = (row._totalCtr || 0) + (metrics.ctr || 0);
         row._totalUniqueClickThroughRate = (row._totalUniqueClickThroughRate || 0) + (metrics.unique_ctr || 0);
@@ -303,6 +395,7 @@ export async function getAdPerformanceBoard(params) {
         row._totalVideoAvgWatchTime = (row._totalVideoAvgWatchTime || 0) + (metrics.video_avg_watch_time || 0);
         row._totalVideoPlayActions = (row._totalVideoPlayActions || 0) + (metrics.video_play_actions || 0);
         row._totalVideoContinuous2SecWatched = (row._totalVideoContinuous2SecWatched || 0) + (metrics.video_continuous_2_sec_watched || 0);
+        row._totalVideoThruplayWatched = (row._totalVideoThruplayWatched || 0) + (metrics.video_thruplay_watched || 0);
         // Sum conversion metrics
         row._totalConversions = (row._totalConversions || 0) + (metrics.total_conversions || 0);
         row._totalConversionValue = (row._totalConversionValue || 0) + (metrics.conversion_value || 0);
@@ -312,31 +405,21 @@ export async function getAdPerformanceBoard(params) {
         // Increment count for averaging
         row._count = (row._count || 0) + 1;
     });
-    // Step 7: USE THE MAPS TO PROCESS LEADS
-    filteredLeads.forEach((lead) => {
+}
+/**
+ * Aggregate lead data into aggregation map
+ */
+function aggregateLeadData(leads, aggregationMap, adNameToCampaignMap, adNameToAdSetMap, groupBy) {
+    leads.forEach((lead) => {
         // Look up campaign name from the map using ad name
         const campaignName = adNameToCampaignMap.get(lead.adName);
         // Use lead's adSetName if available, otherwise look up from map
         const adSetName = lead.adSetName || adNameToAdSetMap.get(lead.adName);
         // Skip leads that don't have matching analytics data
-        // This happens when leads reference ads that aren't in the saved analytics
         if (!campaignName || !adSetName) {
             return;
         }
-        let groupKey;
-        switch (groupBy) {
-            case 'campaign':
-                groupKey = campaignName;
-                break;
-            case 'adset':
-                groupKey = `${campaignName}|${adSetName}`;
-                break;
-            case 'ad':
-                groupKey = `${campaignName}|${adSetName}|${lead.adName}`;
-                break;
-            default:
-                groupKey = lead.adName || 'Unknown Ad';
-        }
+        const groupKey = generateGroupKey(groupBy, campaignName, adSetName, lead.adName);
         // If this group doesn't exist in ad data, create it
         if (!aggregationMap.has(groupKey)) {
             const rowData = {};
@@ -349,22 +432,7 @@ export async function getAdPerformanceBoard(params) {
             if (groupBy === 'ad') {
                 rowData.adName = lead.adName;
             }
-            aggregationMap.set(groupKey, {
-                ...rowData,
-                _groupKey: groupKey,
-                _totalSpend: 0,
-                _totalRevenue: 0,
-                _services: new Set(),
-                _zipCodes: new Set(),
-                numberOfLeads: 0,
-                numberOfEstimateSets: 0,
-                numberOfJobsBooked: 0,
-                numberOfUnqualifiedLeads: 0,
-                numberOfVirtualQuotes: 0,
-                numberOfEstimateCanceled: 0,
-                numberOfProposalPresented: 0,
-                numberOfJobLost: 0,
-            });
+            aggregationMap.set(groupKey, createInitialAggregationRow(groupKey, groupBy, rowData));
         }
         const row = aggregationMap.get(groupKey);
         // Collect service and zip code
@@ -406,7 +474,11 @@ export async function getAdPerformanceBoard(params) {
             row.numberOfUnqualifiedLeads = (row.numberOfUnqualifiedLeads || 0) + 1;
         }
     });
-    // Step 8: Aggregate metrics from DB (use pre-calculated values from saveWeeklyAnalytics)
+}
+/**
+ * Calculate metrics for each row in aggregation map
+ */
+function calculateRowMetrics(aggregationMap) {
     aggregationMap.forEach((row) => {
         const totalSpend = row._totalSpend || 0;
         const totalRevenue = row._totalRevenue || 0;
@@ -421,14 +493,13 @@ export async function getAdPerformanceBoard(params) {
         const estimateCanceled = row.numberOfEstimateCanceled || 0;
         const proposalPresented = row.numberOfProposalPresented || 0;
         const jobLost = row.numberOfJobLost || 0;
-        const count = row._count || 1; // Number of weekly records aggregated
         // Basic metrics (directly from DB)
         row.fb_spend = Number(totalSpend.toFixed(2));
         row.fb_impressions = totalImpressions;
         row.fb_clicks = totalClicks;
         row.fb_unique_clicks = row._totalUniqueClicks || 0;
         row.fb_reach = totalReach;
-        // Calculate metrics from aggregated totals (not pre-calculated averages)
+        // Calculate metrics from aggregated totals
         row.fb_frequency = totalReach > 0 ? Number((totalImpressions / totalReach).toFixed(2)) : 0;
         row.fb_ctr = totalImpressions > 0 ? Number(((totalClicks / totalImpressions) * 100).toFixed(2)) : 0;
         row.fb_unique_ctr = totalImpressions > 0 ? Number((((row._totalUniqueClicks || 0) / totalImpressions) * 100).toFixed(2)) : 0;
@@ -460,7 +531,7 @@ export async function getAdPerformanceBoard(params) {
         row.fb_cost_per_lead = row.fb_total_leads > 0
             ? Number((totalSpend / row.fb_total_leads).toFixed(2))
             : 0;
-        // Lead cost metrics (calculate only lead-related costs, based on CRM leads)
+        // Lead cost metrics
         row.costPerLead = totalLeads > 0 ? Number((totalSpend / totalLeads).toFixed(2)) : null;
         row.costPerJobBooked = jobsBooked > 0 ? Number((totalSpend / jobsBooked).toFixed(2)) : null;
         row.costOfMarketingPercent = totalRevenue > 0 ? Number(((totalSpend / totalRevenue) * 100).toFixed(2)) : null;
@@ -480,26 +551,37 @@ export async function getAdPerformanceBoard(params) {
         row.estimateSetRate = calculateEstimateSetRate(netEstimates, netUnqualifieds);
         row.revenue = Number(totalRevenue.toFixed(2));
         // Calculate engagement rate metrics
-        // Thumbstop Rate: (Video Play Actions / Impressions) * 100
         const videoPlayActions = row._totalVideoPlayActions || 0;
         row.thumbstop_rate = totalImpressions > 0 ? Number(((videoPlayActions / totalImpressions) * 100).toFixed(2)) : null;
-        // Conversion Rate: (FB Total Leads / Link Clicks) * 100
         const fbLeads = row._totalLeads || 0;
         const linkClicks = row._totalLinkClicks || 0;
         row.conversion_rate = linkClicks > 0 ? Number(((fbLeads / linkClicks) * 100).toFixed(2)) : null;
         // See More Rate: (See More Clicks / Impressions) * 100
-        // See More Clicks = All Clicks - Link Clicks - Post Reactions - Post Comments - Post Shares
         const allClicks = totalClicks;
         const postReactions = row._totalPostReactions || 0;
         const postComments = row._totalPostComments || 0;
         const postShares = row._totalPostShares || 0;
         const seeMoreClicks = allClicks - linkClicks - postReactions - postComments - postShares;
         row.see_more_rate = totalImpressions > 0 ? Number(((seeMoreClicks / totalImpressions) * 100).toFixed(2)) : null;
+        // Hold Rate: (ThruPlays / Impressions) * 100
+        const videoThruplayWatched = row._totalVideoThruplayWatched || 0;
+        row.holdRate = totalImpressions > 0 ? Number(((videoThruplayWatched / totalImpressions) * 100).toFixed(2)) : null;
+        // Cost per Link Click: spend / link_clicks
+        row.costPerLinkClick = linkClicks > 0 ? Number((totalSpend / linkClicks).toFixed(2)) : null;
+        // Average Job Size: revenue / numberOfJobsBooked
+        row.averageJobSize = jobsBooked > 0 ? Number((totalRevenue / jobsBooked).toFixed(2)) : null;
+        // Result Rate: (Conversions / Impressions) * 100
+        const totalConversions = row._totalConversions || 0;
+        row.resultRate = totalImpressions > 0 ? Number(((totalConversions / totalImpressions) * 100).toFixed(2)) : null;
         // Convert service and zipCode sets to comma-separated strings
         row.service = row._services && row._services.size > 0 ? Array.from(row._services).sort().join(', ') : undefined;
         row.zipCode = row._zipCodes && row._zipCodes.size > 0 ? Array.from(row._zipCodes).sort().join(', ') : undefined;
     });
-    // Step 9: Filter columns based on requested fields
+}
+/**
+ * Filter columns based on requested fields
+ */
+function filterColumns(aggregationMap, columns) {
     const results = [];
     aggregationMap.forEach((row) => {
         const filteredRow = {};
@@ -619,6 +701,14 @@ export async function getAdPerformanceBoard(params) {
             filteredRow.conversion_rate = row.conversion_rate;
         if (columns.see_more_rate)
             filteredRow.see_more_rate = row.see_more_rate;
+        if (columns.holdRate)
+            filteredRow.holdRate = row.holdRate;
+        if (columns.costPerLinkClick)
+            filteredRow.costPerLinkClick = row.costPerLinkClick;
+        if (columns.averageJobSize)
+            filteredRow.averageJobSize = row.averageJobSize;
+        if (columns.resultRate)
+            filteredRow.resultRate = row.resultRate;
         // Store internal fields for sorting
         filteredRow._totalSpend = row._totalSpend;
         results.push(filteredRow);
@@ -633,8 +723,12 @@ export async function getAdPerformanceBoard(params) {
     results.forEach((row) => {
         delete row._totalSpend;
     });
-    // Calculate overall averages from all rows in aggregationMap
-    let totalRows = 0;
+    return results;
+}
+/**
+ * Calculate overall averages from all rows
+ */
+function calculateAverages(aggregationMap) {
     let sumSpend = 0;
     let sumImpressions = 0;
     let sumClicks = 0;
@@ -651,8 +745,9 @@ export async function getAdPerformanceBoard(params) {
     let sumProposalPresented = 0;
     let sumJobLost = 0;
     let sumRevenue = 0;
+    let sumVideoThruplayWatched = 0;
+    let sumLinkClicks = 0;
     aggregationMap.forEach((row) => {
-        totalRows++;
         sumSpend += row._totalSpend || 0;
         sumImpressions += row._totalImpressions || 0;
         sumClicks += row._totalClicks || 0;
@@ -669,9 +764,11 @@ export async function getAdPerformanceBoard(params) {
         sumProposalPresented += row.numberOfProposalPresented || 0;
         sumJobLost += row.numberOfJobLost || 0;
         sumRevenue += row._totalRevenue || 0;
+        sumVideoThruplayWatched += row._totalVideoThruplayWatched || 0;
+        sumLinkClicks += row._totalLinkClicks || 0;
     });
     // Only include calculated averages (ratios/percentages), not sums
-    const averages = {
+    return {
         fb_frequency: sumReach > 0 ? Number((sumImpressions / sumReach).toFixed(2)) : 0,
         fb_ctr: sumImpressions > 0 ? Number(((sumClicks / sumImpressions) * 100).toFixed(2)) : 0,
         fb_unique_ctr: sumImpressions > 0 ? Number(((sumUniqueClicks / sumImpressions) * 100).toFixed(2)) : 0,
@@ -706,7 +803,43 @@ export async function getAdPerformanceBoard(params) {
             });
             return totalNetEstimates > 0 ? Number((sumSpend / totalNetEstimates).toFixed(2)) : null;
         })(),
+        holdRate: sumImpressions > 0 ? Number(((sumVideoThruplayWatched / sumImpressions) * 100).toFixed(2)) : null,
+        costPerLinkClick: sumLinkClicks > 0 ? Number((sumSpend / sumLinkClicks).toFixed(2)) : null,
+        averageJobSize: sumJobsBooked > 0 ? Number((sumRevenue / sumJobsBooked).toFixed(2)) : null,
+        resultRate: sumImpressions > 0 ? Number(((sumTotalConversions / sumImpressions) * 100).toFixed(2)) : null,
     };
+}
+/**
+ * Main function to get ad performance board data
+ */
+export async function getAdPerformanceBoard(params) {
+    const { clientId, filters, columns, groupBy } = params;
+    // Fetch saved weekly analytics from database
+    const savedAnalytics = await fbWeeklyAnalyticsRepository.getAnalyticsByDateRange(clientId, filters.startDate, filters.endDate);
+    if (savedAnalytics.length === 0) {
+        return getEmptyResponse();
+    }
+    // Step 1: Fetch and enrich creatives
+    const creativesMap = await fetchAndEnrichCreatives(savedAnalytics, clientId);
+    // Step 2: Map analytics to enriched ads
+    const enrichedAds = mapAnalyticsToEnrichedAds(savedAnalytics, creativesMap);
+    // Step 3: Fetch leads and extract filter options
+    const { allLeads, availableZipCodes, availableServiceTypes } = await fetchLeadsAndExtractOptions(clientId, filters.startDate, filters.endDate);
+    // Step 4: Apply filters
+    const filteredLeads = applyLeadFilters(allLeads, filters);
+    const filteredAds = applyAdFilters(enrichedAds, filters);
+    // Step 5: Build ad name maps for lead matching
+    const { adNameToCampaignMap, adNameToAdSetMap } = buildAdNameMaps(filteredAds);
+    // Step 6: Build aggregation map
+    const aggregationMap = new Map();
+    aggregateAdMetrics(filteredAds, aggregationMap, groupBy);
+    aggregateLeadData(filteredLeads, aggregationMap, adNameToCampaignMap, adNameToAdSetMap, groupBy);
+    // Step 7: Calculate row metrics
+    calculateRowMetrics(aggregationMap);
+    // Step 8: Filter columns and sort
+    const results = filterColumns(aggregationMap, columns);
+    // Step 9: Calculate overall averages
+    const averages = calculateAverages(aggregationMap);
     return {
         rows: results,
         averages,

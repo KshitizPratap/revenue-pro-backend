@@ -447,6 +447,10 @@ export interface BoardColumns {
   thumbstop_rate?: boolean;
   conversion_rate?: boolean;
   see_more_rate?: boolean;
+  holdRate?: boolean;
+  costPerLinkClick?: boolean;
+  averageJobSize?: boolean;
+  resultRate?: boolean;
 }
 
 export interface BoardRow {
@@ -503,6 +507,10 @@ export interface BoardRow {
   thumbstop_rate?: number | null;
   conversion_rate?: number | null;
   see_more_rate?: number | null;
+  holdRate?: number | null;
+  costPerLinkClick?: number | null;
+  averageJobSize?: number | null;
+  resultRate?: number | null;
   optimizationGoal?: string;
   
   _groupKey?: string;
@@ -535,6 +543,7 @@ export interface BoardRow {
   _totalVideoAvgWatchTime?: number;
   _totalVideoPlayActions?: number;
   _totalVideoContinuous2SecWatched?: number;
+  _totalVideoThruplayWatched?: number;
   _totalConversions?: number;
   _totalConversionValue?: number;
   _totalCostPerConversion?: number;
@@ -566,6 +575,10 @@ export interface BoardResponse {
     costPerJobBooked: number | null;
     costOfMarketingPercent: number | null;
     estimateSetRate: number | null;
+    holdRate: number | null;
+    costPerLinkClick: number | null;
+    averageJobSize: number | null;
+    resultRate: number | null;
   };
   availableZipCodes: string[];
   availableServiceTypes: string[];

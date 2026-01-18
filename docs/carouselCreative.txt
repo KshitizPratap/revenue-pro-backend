@@ -1,0 +1,117 @@
+API -> 611857341994739?fields=image_url,name,object_story_spec,asset_feed_spec
+
+- use object_story_spec.link_data.child_attachments for type carousel
+
+RESPONSE ->
+{
+  "name": "Proper Painters, LLC 2025-08-08-6357fd26b5baedbd55a704e96a04337e",
+  "object_story_spec": {
+    "page_id": "118708171315663",
+    "instagram_user_id": "17841466269645598",
+    "link_data": {
+      "link": "http://fb.me/",
+      "message": "This Ad Is Only For Richmond Homeowners Who Are Thinking About Painting.
+
+We do not expect you to take our word for it when we tell you we have a no mess, no stress guarantee. That wouldn't be sensible! :)
+
+But.. We do want to share what our neighbors are saying after we paint their homes..
+
+- Everything Was on Time
+- I Now Love the Look & Protection
+- I Was Never Left Wondering
+- They Took Their Time on Prep
+
+If you are looking for a competent painter who will treat you and your home right, consider us. Homeowners also enjoy the following benefits when working with us:
+
+- Free Color Consultations --> so you can make confident decisions
+- Strong 2-4 Year Warranties --> so you feel safe hiring us
+- Clear and Quick Communication --> so you're never left wondering
+
+To start the conversation, click or tap 'Get Quote' and schedule your FREE quote appointment today.
+
+We are looking forward to working with you!
+
+Dave Weatherford, Owner
+Proper Painters
+804-409-9727
+https://properpainters.com",
+      "call_to_action": {
+        "type": "GET_QUOTE",
+        "value": {
+          "lead_gen_form_id": "728805583309662"
+        }
+      },
+      "child_attachments": [
+        {
+          "link": "http://fb.me/",
+          "image_hash": "bdfef02fddc484748701e7ea7f2d4f69",
+          "name": "RVA Trusts Proper Painters",
+          "call_to_action": {
+            "type": "GET_QUOTE",
+            "value": {
+              "lead_gen_form_id": "728805583309662"
+            }
+          }
+        },
+        {
+          "link": "http://fb.me/",
+          "image_hash": "e66ae58fa0c26190c65e75207ca98362",
+          "name": "On Time Every Time",
+          "call_to_action": {
+            "type": "GET_QUOTE",
+            "value": {
+              "lead_gen_form_id": "728805583309662"
+            }
+          }
+        },
+        {
+          "link": "http://fb.me/",
+          "image_hash": "0844ff03e70be3519b9a5423dc1cd315",
+          "name": "Schedule Free Estimate",
+          "call_to_action": {
+            "type": "GET_QUOTE",
+            "value": {
+              "lead_gen_form_id": "728805583309662"
+            }
+          }
+        },
+        {
+          "link": "http://fb.me/",
+          "image_hash": "cbcd074d02746485bd4faf060f39b9c5",
+          "name": "Schedule Free Estimate",
+          "call_to_action": {
+            "type": "GET_QUOTE",
+            "value": {
+              "lead_gen_form_id": "728805583309662"
+            }
+          }
+        },
+        {
+          "link": "http://fb.me/",
+          "image_hash": "fd4388f594776ce9fd91e37ba27611da",
+          "name": "Prep Matters To Us",
+          "call_to_action": {
+            "type": "GET_QUOTE",
+            "value": {
+              "lead_gen_form_id": "728805583309662"
+            }
+          }
+        },
+        {
+          "link": "http://fb.me/",
+          "image_hash": "382b4e88e0f05e86c3dd47f3fb8728e1",
+          "name": "Schedule Free Estimate",
+          "call_to_action": {
+            "type": "GET_QUOTE",
+            "value": {
+              "lead_gen_form_id": "728805583309662"
+            }
+          }
+        }
+      ],
+      "multi_share_end_card": false,
+      "multi_share_optimized": true
+    }
+  },
+  "id": "611857341994739"
+}

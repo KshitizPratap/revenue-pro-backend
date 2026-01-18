@@ -365,18 +365,6 @@ export class LeadController {
                     });
                     continue;
                 }
-                // Check if email/phone present OR zip present
-                const hasEmail = rawPayload.email && rawPayload.email.trim() !== '';
-                const hasPhone = rawPayload.phone && rawPayload.phone.trim() !== '';
-                const hasZip = rawPayload.zip && rawPayload.zip.trim() !== '';
-                // If no email/phone, zip is required
-                if (!hasEmail && !hasPhone && !hasZip) {
-                    validationErrors.push({
-                        index: i,
-                        error: "At least one of email, phone, or zip is required"
-                    });
-                    continue;
-                }
                 // Parse and convert leadDate from CST to UTC before sanitization
                 if (rawPayload.leadDate) {
                     const parsedDate = utils.parseDate(rawPayload.leadDate);

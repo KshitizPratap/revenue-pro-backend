@@ -1,0 +1,101 @@
+✅ RECOMMENDED MODEL (MINIMAL & SAFE)
+Use ONLY these 2 fields:
+
+creativeMode → how the creative is assembled
+
+mediaType → what media it uses
+
+🧠 FIELD 1: creativeMode
+
+Answers: “Is this static, dynamic, or carousel?”
+
+creativeMode: {
+  type: String,
+  enum: [
+    'STATIC',              // single asset, fixed
+    'STATIC_CAROUSEL',     // child_attachments
+    'DYNAMIC_ASSET_FEED',  // asset_feed_spec (images/videos)
+    'DYNAMIC_CATALOG'      // product-based (iframe only)
+  ],
+  required: true
+}
+
+🧠 FIELD 2: mediaType
+
+Answers: “What kind of media does it contain?”
+
+mediaType: {
+  type: String,
+  enum: [
+    'IMAGE',
+    'VIDEO',
+    'MIXED'   // image + video
+  ],
+  required: true
+}
+
+❌ WHAT YOU SHOULD NOT DO
+
+Avoid:
+
+isDynamic: Boolean
+isCarousel: Boolean
+
+type:video|image|dynamic|carosuel
+
+
+❌ These can conflict:
+
+isDynamic	isCarousel	Meaning?
+true	true	Which kind?
+false	true	Impossible
+true	false	Which dynamic?
+
+Flags rot over time.
+
+✅ HOW TO DERIVE THESE VALUES (LOGIC YOU ALREADY HAVE)
+1️⃣ Determine creativeMode
+if (object_story_spec?.link_data?.child_attachments?.length > 1) {
+  creativeMode = 'STATIC_CAROUSEL';
+}
+else if (asset_feed_spec?.products) {
+  creativeMode = 'DYNAMIC_CATALOG';
+}
+else if (asset_feed_spec?.images || asset_feed_spec?.videos) {
+  creativeMode = 'DYNAMIC_ASSET_FEED';
+}
+else {
+  creativeMode = 'STATIC';
+}
+
+2️⃣ Determine mediaType
+const hasImages =
+  creative.image_url ||
+  asset_feed_spec?.images?.length ||
+  childAttachmentsHaveImages;
+
+const hasVideos =
+  object_story_spec?.video_data?.video_id ||
+  asset_feed_spec?.videos?.length ||
+  childAttachmentsHaveVideos;
+
+if (hasImages && hasVideos) mediaType = 'MIXED';
+else if (hasVideos) mediaType = 'VIDEO';
+else mediaType = 'IMAGE';
+
+🧾 FINAL MONGO SCHEMA (CLEAN)
+creativeMode: {
+  type: String,
+  enum: ['STATIC', 'STATIC_CAROUSEL', 'DYNAMIC_ASSET_FEED', 'DYNAMIC_CATALOG'],
+  required: true
+},
+mediaType: {
+  type: String,
+  enum: ['IMAGE', 'VIDEO', 'MIXED'],
+  required: true
+},
+imageHashes: [String],
+imageUrls: [String],
+videoIds: [String],
+videoUrls: [String],
+previewIframe: [String]

@@ -1,0 +1,44 @@
+API -> 1410758909727017?fields=image_url,name,object_story_spec,asset_feed_spec
+
+- use object_story_spec.video_data.video_id or root video_id for video type check
+- use object_story_spec video_id for fetching video url via /<video_id>?fields=source
+{
+  "source": "https://scontent.fdel27-3.fna.fbcdn.net/o1/v/t2/f2/m366/AQMOzyOdnp9nkdMago1Nzxk9eDuvGw-3loGt24BMJswk0WxiPCpxeELhSiv0mltdg-CfwnL0wZMIxCHZYnB9iL51RNu-wkYJFdAv6ZNS7Q2iYA.mp4?_nc_cat=110&_nc_oc=Adk48HkGbc0b2wELlPMx3mc47sc5SON-iW4X_bxuBqSuPeccNd6wXuSDopDdVcKVEQ5KY89bhdVlJmyKmtNJhgjt&_nc_sid=5e9851&_nc_ht=scontent.fdel27-3.fna.fbcdn.net&_nc_ohc=TllMi0K3SisQ7kNvwFy65N6&efg=eyJ2ZW5jb2RlX3RhZyI6Inhwdl9wcm9ncmVzc2l2ZS5GQUNFQk9PSy4uQzMuNzIwLmRhc2hfaDI2NC1iYXNpYy1nZW4yXzcyMHAiLCJ4cHZfYXNzZXRfaWQiOjkyMDgxNjY4OTI1NjkzMjAsImFzc2V0X2FnZV9kYXlzIjozNjcsInZpX3VzZWNhc2VfaWQiOjEwNzk5LCJkdXJhdGlvbl9zIjoxNCwidXJsZ2VuX3NvdXJjZSI6Ind3dyJ9&ccb=17-1&vs=7212e0fc9f2077c3&_nc_vs=HBksFQIYRWZiX2VwaGVtZXJhbC9ERjQwRjkyQUE0Nzk4MjYyMTZGNDAwQjcyQUFFMkNCNl9tdF8xX3ZpZGVvX2Rhc2hpbml0Lm1wNBUAAsgBEgAVAhg6cGFzc3Rocm91Z2hfZXZlcnN0b3JlL0dQS21QQnlJUkpLdzh2d0NBQm55UDdyTHFvOEpidjRHQUFBRhUCAsgBEgAoABgAGwKIB3VzZV9vaWwBMRJwcm9ncmVzc2l2ZV9yZWNpcGUBMRUAACbQi9DK7bHbIBUCKAJDMywXQCzMzMzMzM0YGWRhc2hfaDI2NC1iYXNpYy1nZW4yXzcyMHARAHUCZd6oAQA&_nc_gid=NeQ4FZTE6wqInjgH_eWq-A&edm=APRAPSkEAAAA&_nc_zt=28&_nc_tpa=Q5bMBQHf5fNWFxHKqBedevmPTk_mBFL-y5E90MA9HUfGOohuZtz4mAsPxoiUlP1FtgN326njri2ZpH4jAQ&oh=00_AfrgYmnC2omzC0x5eceU6SH2rw26b2uUc6vUXp9qF2K1Jg&oe=6971AEBE&bitrate=1878223&tag=dash_h264-basic-gen2_720p",
+  "id": "517771880835936"
+}
+
+RESPONSE ->
+{
+  "name": "Get a Free Estimate Today! 2025-01-14-0c3cbfb8eb9274915002980292505e5c",
+  "object_story_spec": {
+    "page_id": "384826428046449",
+    "instagram_user_id": "17841468246136489",
+    "video_data": {
+      "video_id": "517771880835936",
+      "title": "Get a Free Estimate Today!",
+      "message": "My name is Dan and I own Zeuli Paint. I serve the St. Croix Valley and Woodbury areas and I’m incredibly honored to be part of these amazing communities. 
+
+Our clients tell us that they paint their homes because they want it to look fresher, feel healthier and be a representation of them instead of what the last homeowner or their builder chose.
+
+Right now is a great time to book your painting project as we’re currently offering up to 10% off on our painting services when you book this month. 
+
+Just click or tap 'Get Quote' to get started with your FREE quote today.
+
+We are looking forward to working with you!
+
+Dan Zeuli
+Zeuli Paint",
+      "link_description": "Family owned, locally operated",
+      "call_to_action": {
+        "type": "GET_QUOTE",
+        "value": {
+          "lead_gen_form_id": "504329212270854",
+          "link": "http://fb.me/"
+        }
+      },
+      "image_url": "https://www.facebook.com/ads/image/?d=AQJuAeAyedFKtjREFrYfPXaDXvRt6VfbE_2KQ7YGKgziMyipP5RUrCZwfQigixcf-iMnNEpSC-jxD7DTlSENPxKIv3BzYEDZh9qmfGWHQwzqSG6xfmK9omDXLjlHR94DtPHyemY3ygogk8gSSYXQBH2j",
+      "image_hash": "98eede8105a8212362b0621007d18164"
+    }
+  },
+  "id": "1410758909727017"
+}

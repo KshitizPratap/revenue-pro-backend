@@ -12,27 +12,8 @@ export interface ICreative {
   description: string | null;
   body: string | null;
   
-  // Media Assets
+  // Thumbnail
   thumbnailUrl: string | null;
-  imageUrl: string | null;
-  imageHash: string | null;
-  videoId: string | null;
-  
-  // Images Array (for carousels or multiple images)
-  images: Array<{
-    url: string;
-    hash: string;
-    width?: number;
-    height?: number;
-  }>;
-  
-  // Videos Array
-  videos: Array<{
-    id: string;
-    url: string;
-    thumbnailUrl: string;
-    duration?: number;
-  }>;
   
   // Carousel/Multi-Image Ads
   childAttachments: Array<{
@@ -50,8 +31,18 @@ export interface ICreative {
     value: any;
   } | null;
   
-  // Creative Type
-  creativeType: 'image' | 'video' | 'carousel' | 'link' | 'other';
+  // Creative Mode (how the creative is assembled)
+  creativeMode: 'STATIC' | 'STATIC_CAROUSEL' | 'DYNAMIC_ASSET_FEED' | 'DYNAMIC_CATALOG';
+  
+  // Media Type (what media it uses)
+  mediaType: 'IMAGE' | 'VIDEO' | 'MIXED';
+  
+  // Media Arrays (enriched URLs and IDs)
+  imageHashes: string[];
+  imageUrls: string[];
+  videoIds: string[];
+  videoUrls: string[];
+  previewIframe: string[]; // For videos with permission errors
   
   // Object Story Spec (Facebook's creative structure)
   objectStorySpec: any;

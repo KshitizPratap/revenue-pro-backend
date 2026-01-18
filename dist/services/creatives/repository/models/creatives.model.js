@@ -9,31 +9,8 @@ const creativesSchema = new Schema({
     headline: { type: String, default: null },
     description: { type: String, default: null },
     body: { type: String, default: null },
-    // Media Assets
+    // Thumbnail
     thumbnailUrl: { type: String, default: null },
-    imageUrl: { type: String, default: null },
-    imageHash: { type: String, default: null },
-    videoId: { type: String, default: null },
-    // Images Array (for carousels or multiple images)
-    images: {
-        type: [{
-                url: { type: String },
-                hash: { type: String },
-                width: { type: Number },
-                height: { type: Number }
-            }],
-        default: []
-    },
-    // Videos Array
-    videos: {
-        type: [{
-                id: { type: String },
-                url: { type: String },
-                thumbnailUrl: { type: String },
-                duration: { type: Number }
-            }],
-        default: []
-    },
     // Carousel/Multi-Image Ads
     childAttachments: {
         type: [{
@@ -51,11 +28,38 @@ const creativesSchema = new Schema({
         type: Schema.Types.Mixed,
         default: null
     },
-    // Creative Type
-    creativeType: {
+    // Creative Mode (how the creative is assembled)
+    creativeMode: {
         type: String,
-        enum: ['image', 'video', 'carousel', 'link', 'other'],
-        default: 'other'
+        enum: ['STATIC', 'STATIC_CAROUSEL', 'DYNAMIC_ASSET_FEED', 'DYNAMIC_CATALOG'],
+        required: true
+    },
+    // Media Type (what media it uses)
+    mediaType: {
+        type: String,
+        enum: ['IMAGE', 'VIDEO', 'MIXED'],
+        required: true
+    },
+    // Media Arrays (enriched URLs and IDs)
+    imageHashes: {
+        type: [String],
+        default: []
+    },
+    imageUrls: {
+        type: [String],
+        default: []
+    },
+    videoIds: {
+        type: [String],
+        default: []
+    },
+    videoUrls: {
+        type: [String],
+        default: []
+    },
+    previewIframe: {
+        type: [String],
+        default: []
     },
     // Object Story Spec (Facebook's creative structure)
     objectStorySpec: { type: Schema.Types.Mixed, default: null },

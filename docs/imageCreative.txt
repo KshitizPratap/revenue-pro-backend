@@ -1,0 +1,36 @@
+API -> 1192288272616446?fields=name,object_story_spec,image_url,thumbnail_url,video_id,asset_feed_spec.......
+
+image_url,thumbnail_url at root level so save in db directly
+
+RESPONSE ->
+{
+  "name": "Life leaves its mark on every wall. 2025-01-29-ec4dfa3715227a923c9316d157b85b22",
+  "object_story_spec": {
+    "page_id": "384826428046449",
+    "link_data": {
+      "link": "https://www.zeulipaint.com/",
+      "message": "Scratches, smudges, stains—sound familiar? Time for a change.
+
+The Wilsons had just moved into their new house. It had great bones, but as they unpacked, the cracks started to show—literally.
+
+ Builder-grade paint covered every wall, showing scuffs and scratches with even the smallest touch. The colors felt dull, mismatched, and far from the warm, inviting home they imagined for their family.
+
+With two kids and a dog, every smudge and fingerprint became a source of frustration. By the end of the first month, the Wilsons knew they needed a change.
+
+That’s when they reached out to Zeuli Paint. 
+
+In just a few days, their tired walls were transformed with high-quality, stain-resistant finishes that stood up to their busy life. The complimentary color consultation helped them create a palette that flowed beautifully from room to room. 
+
+And with a long-term warranty and touch-ups included, they knew this refresh would last.
+
+Now, their home doesn’t just look better—it feels better. Clean, calm, and truly theirs.
+
+📅 Schedule a free consultation today and transform your space into a home that inspires",
+      "name": "Life leaves its mark on every wall. ",
+      "image_hash": "8a688a7c8ac88fa84960b34f3cdb2ca0"
+    }
+  },
+  "image_url": "https://scontent.fdel27-1.fna.fbcdn.net/v/t45.1600-4/554051467_32372767168988925_4646602351825725256_n.jpg?_nc_cat=109&ccb=1-7&_nc_sid=890911&_nc_ohc=ayTIDQGEWioQ7kNvwGZrWEi&_nc_oc=AdlIjzdPI6aIfP0eb8Pg_hfzFG4T9Xo5TT9q1yZQWNeoYG9vTYBBOtVdz2CjiJpU_BmQ_EitUVyk0ZfT46jHy_3N&_nc_zt=1&_nc_ht=scontent.fdel27-1.fna&edm=AAT1rw8EAAAA&_nc_gid=IrAcA4nHXwsERhJVyyrSAg&_nc_tpa=Q5bMBQH6ViPhJiRISxmDPsKM4DxEho5A_0A5L-wIHmWoGlRkXXMNT5nKu_4M-YyDgmi6X1YhADrSGuGT4w&oh=00_AfpZ5h1s8FRh8RvSf_D39orUa0-fHx_6p2mE4zanhzF6ig&oe=6971D095",
+  "thumbnail_url": "https://external.fdel27-4.fna.fbcdn.net/emg1/v/t13/1630695865368919577?url=https%3A%2F%2Fwww.facebook.com%2Fads%2Fimage%2F%3Fd%3DAQImBrjIaORshmFh5b42L-Lg9ryB_OYDSMh0LG2V3DyDfIuQmGtLx9A2BklUxt6PSBbdwo0rJVLFvWtIiz38QPkVaQp-CN4BrOOMIgUqAbDBBSxYceviXKHo-r1u_Ksi6sEbkyE9S6KgTIu8yus7dQvY&fb_obo=1&utld=facebook.com&stp=c0.5000x0.5000f_dst-emg0_p64x64_q75_tt6&edm=AAT1rw8EAAAA&_nc_gid=IrAcA4nHXwsERhJVyyrSAg&_nc_oc=Adncgiw39A_0VYUGU7lNtMoPyRA7U0W3LLRj9fzmLmlu_nENDxAqxD4MX8Tzcn_LmM4zIEGDW41pR--jLwdEd4ku&ccb=13-1&oh=06_Q3-7AXtUvHgaJ6Zkv1XU4IKCho3hSZkIvHdLBbxjc2--m1Cw&oe=696DE3FE&_nc_sid=58080a",
+  "id": "1192288272616446"
+}
