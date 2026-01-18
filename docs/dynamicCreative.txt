@@ -226,26 +226,26 @@ RESPONSE Type 1 ->
     "id": "4263734520614702"
   }
 
-  isDynamic=true but type=video ........if fetch video url from video_id fails then load previews and save in DB
-  VIDEO URL RESOLUTION RULE
+isDynamic=true but type=video ........if fetch video url from video_id fails then load previews and save in DB
+VIDEO URL RESOLUTION RULE
 
-  1. Try:
-    GET /video_id?fields=source
+1. Try:
+  GET /video_id?fields=source
 
-  If success:
-    → save video_url
+If success:
+  → save video_url
 
-  If (#10) permission error:
-    → use thumbnail for preview
-    → <creative_id>/previews?ad_format=DESKTOP_FEED_STANDARD
-    → Response - {
-    "data": [
-      {
-        "body": "<iframe src=\"https://business.facebook.com/ads/api/preview_iframe.php?d=AQKaVG1rYuw-C_NouidscWhy-u5XhieKs-TcLgmty0HsNI1_AjZjoY2KZnUnddks26tVITRrUltyiREBzK064EdNlcBK1UcU_pJs_16j4w3So8bv7Vgc-yI37P9eRaEgXAGMGnGf2C5CtSahKeQiAa-82wJOufIJo1P6K6ivFE2ZuiH05yNkjd6qb2M46NGUXW7KWUDZXG7gXIRrF8ot0ibdDG-55UzH7onZhdLbTYmysp86uoWT48y3izGUid75ArfS-4ln9wGEAjs0sOf1M2PYiETlkMGh1XSdRXvf8Ovyw0fMxmNEKz-Vi0piyzv0JDnV8yIECrNPCfa2r0O2kgZ1F4jA7ZUfwQ_gAqpA9mVimKulIFaQaLIBMBe-nMiyGWTmYQnednmx_gFnxcGFBxsF-D43sJ-sJK49G0D61q0Rvm04jmaADSjGvdiIu54SdwU&amp;t=AQKYeA2-6MapEszx2y0\" width=\"540\" height=\"690\" scrolling=\"yes\" style=\"border: none;\"></iframe>"
-      }
-    ]
+If (#10) permission error:
+  → use thumbnail for preview
+  → <creative_id>/previews?ad_format=DESKTOP_FEED_STANDARD
+  → Response - {
+  "data": [
+    {
+      "body": "<iframe src=\"https://business.facebook.com/ads/api/preview_iframe.php?d=AQKaVG1rYuw-C_NouidscWhy-u5XhieKs-TcLgmty0HsNI1_AjZjoY2KZnUnddks26tVITRrUltyiREBzK064EdNlcBK1UcU_pJs_16j4w3So8bv7Vgc-yI37P9eRaEgXAGMGnGf2C5CtSahKeQiAa-82wJOufIJo1P6K6ivFE2ZuiH05yNkjd6qb2M46NGUXW7KWUDZXG7gXIRrF8ot0ibdDG-55UzH7onZhdLbTYmysp86uoWT48y3izGUid75ArfS-4ln9wGEAjs0sOf1M2PYiETlkMGh1XSdRXvf8Ovyw0fMxmNEKz-Vi0piyzv0JDnV8yIECrNPCfa2r0O2kgZ1F4jA7ZUfwQ_gAqpA9mVimKulIFaQaLIBMBe-nMiyGWTmYQnednmx_gFnxcGFBxsF-D43sJ-sJK49G0D61q0Rvm04jmaADSjGvdiIu54SdwU&amp;t=AQKYeA2-6MapEszx2y0\" width=\"540\" height=\"690\" scrolling=\"yes\" style=\"border: none;\"></iframe>"
     }
-    2. Save preview iframe string in db
+  ]
+  }
+  2. Save preview iframe string in db
 
 
 API 2 -> 597522193445237?fields=name,object_story_spec,image_url,thumbnail_url,video_id,asset_feed_spec,........
