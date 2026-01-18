@@ -24,6 +24,10 @@ function getEmptyResponse() {
             costPerJobBooked: 0,
             costOfMarketingPercent: 0,
             estimateSetRate: 0,
+            holdRate: null,
+            costPerLinkClick: null,
+            averageJobSize: null,
+            resultRate: null,
         },
         availableZipCodes: [],
         availableServiceTypes: []
@@ -111,16 +115,22 @@ function mapAnalyticsToEnrichedAds(savedAnalytics, creativesMap) {
                 // Add enriched creative data from creatives collection
                 ...(enrichedCreative && {
                     thumbnailUrl: enrichedCreative.thumbnailUrl,
-                    imageUrl: enrichedCreative.imageUrl,
-                    imageHash: enrichedCreative.imageHash,
-                    videoId: enrichedCreative.videoId,
-                    creativeType: enrichedCreative.creativeType,
-                    images: enrichedCreative.images,
-                    videos: enrichedCreative.videos,
-                    childAttachments: enrichedCreative.childAttachments,
-                    callToAction: enrichedCreative.callToAction,
                     description: enrichedCreative.description,
                     body: enrichedCreative.body,
+                    // New schema fields
+                    imageUrls: enrichedCreative.imageUrls || [],
+                    videoUrls: enrichedCreative.videoUrls || [],
+                    videoIds: enrichedCreative.videoIds || [],
+                    previewIframe: enrichedCreative.previewIframe || [],
+                    imageHashes: enrichedCreative.imageHashes || [],
+                    creativeMode: enrichedCreative.creativeMode,
+                    mediaType: enrichedCreative.mediaType,
+                    childAttachments: enrichedCreative.childAttachments || [],
+                    callToAction: enrichedCreative.callToAction,
+                    // Legacy fields (for backward compatibility)
+                    imageUrl: enrichedCreative.imageUrls?.[0],
+                    imageHash: enrichedCreative.imageHashes?.[0],
+                    videoId: enrichedCreative.videoIds?.[0],
                 })
             } : null,
             lead_form: analytics.leadForm ? {
@@ -308,6 +318,7 @@ function createInitialAggregationRow(groupKey, groupBy, rowData) {
         _totalVideoAvgWatchTime: 0,
         _totalVideoPlayActions: 0,
         _totalVideoContinuous2SecWatched: 0,
+        _totalVideoThruplayWatched: 0,
         _totalConversions: 0,
         _totalConversionValue: 0,
         _totalCostPerConversion: 0,
@@ -382,6 +393,7 @@ function aggregateAdMetrics(ads, aggregationMap, groupBy) {
         row._totalVideoAvgWatchTime = (row._totalVideoAvgWatchTime || 0) + (metrics.video_avg_watch_time || 0);
         row._totalVideoPlayActions = (row._totalVideoPlayActions || 0) + (metrics.video_play_actions || 0);
         row._totalVideoContinuous2SecWatched = (row._totalVideoContinuous2SecWatched || 0) + (metrics.video_continuous_2_sec_watched || 0);
+        row._totalVideoThruplayWatched = (row._totalVideoThruplayWatched || 0) + (metrics.video_thruplay_watched || 0);
         // Sum conversion metrics
         row._totalConversions = (row._totalConversions || 0) + (metrics.total_conversions || 0);
         row._totalConversionValue = (row._totalConversionValue || 0) + (metrics.conversion_value || 0);
@@ -549,6 +561,16 @@ function calculateRowMetrics(aggregationMap) {
         const postShares = row._totalPostShares || 0;
         const seeMoreClicks = allClicks - linkClicks - postReactions - postComments - postShares;
         row.see_more_rate = totalImpressions > 0 ? Number(((seeMoreClicks / totalImpressions) * 100).toFixed(2)) : null;
+        // Hold Rate: (ThruPlays / Impressions) * 100
+        const videoThruplayWatched = row._totalVideoThruplayWatched || 0;
+        row.holdRate = totalImpressions > 0 ? Number(((videoThruplayWatched / totalImpressions) * 100).toFixed(2)) : null;
+        // Cost per Link Click: spend / link_clicks
+        row.costPerLinkClick = linkClicks > 0 ? Number((totalSpend / linkClicks).toFixed(2)) : null;
+        // Average Job Size: revenue / numberOfJobsBooked
+        row.averageJobSize = jobsBooked > 0 ? Number((totalRevenue / jobsBooked).toFixed(2)) : null;
+        // Result Rate: (Conversions / Impressions) * 100
+        const totalConversions = row._totalConversions || 0;
+        row.resultRate = totalImpressions > 0 ? Number(((totalConversions / totalImpressions) * 100).toFixed(2)) : null;
         // Convert service and zipCode sets to comma-separated strings
         row.service = row._services && row._services.size > 0 ? Array.from(row._services).sort().join(', ') : undefined;
         row.zipCode = row._zipCodes && row._zipCodes.size > 0 ? Array.from(row._zipCodes).sort().join(', ') : undefined;
@@ -677,6 +699,14 @@ function filterColumns(aggregationMap, columns) {
             filteredRow.conversion_rate = row.conversion_rate;
         if (columns.see_more_rate)
             filteredRow.see_more_rate = row.see_more_rate;
+        if (columns.holdRate)
+            filteredRow.holdRate = row.holdRate;
+        if (columns.costPerLinkClick)
+            filteredRow.costPerLinkClick = row.costPerLinkClick;
+        if (columns.averageJobSize)
+            filteredRow.averageJobSize = row.averageJobSize;
+        if (columns.resultRate)
+            filteredRow.resultRate = row.resultRate;
         // Store internal fields for sorting
         filteredRow._totalSpend = row._totalSpend;
         results.push(filteredRow);
@@ -713,6 +743,8 @@ function calculateAverages(aggregationMap) {
     let sumProposalPresented = 0;
     let sumJobLost = 0;
     let sumRevenue = 0;
+    let sumVideoThruplayWatched = 0;
+    let sumLinkClicks = 0;
     aggregationMap.forEach((row) => {
         sumSpend += row._totalSpend || 0;
         sumImpressions += row._totalImpressions || 0;
@@ -730,6 +762,8 @@ function calculateAverages(aggregationMap) {
         sumProposalPresented += row.numberOfProposalPresented || 0;
         sumJobLost += row.numberOfJobLost || 0;
         sumRevenue += row._totalRevenue || 0;
+        sumVideoThruplayWatched += row._totalVideoThruplayWatched || 0;
+        sumLinkClicks += row._totalLinkClicks || 0;
     });
     // Only include calculated averages (ratios/percentages), not sums
     return {
@@ -767,6 +801,10 @@ function calculateAverages(aggregationMap) {
             });
             return totalNetEstimates > 0 ? Number((sumSpend / totalNetEstimates).toFixed(2)) : null;
         })(),
+        holdRate: sumImpressions > 0 ? Number(((sumVideoThruplayWatched / sumImpressions) * 100).toFixed(2)) : null,
+        costPerLinkClick: sumLinkClicks > 0 ? Number((sumSpend / sumLinkClicks).toFixed(2)) : null,
+        averageJobSize: sumJobsBooked > 0 ? Number((sumRevenue / sumJobsBooked).toFixed(2)) : null,
+        resultRate: sumImpressions > 0 ? Number(((sumTotalConversions / sumImpressions) * 100).toFixed(2)) : null,
     };
 }
 /**

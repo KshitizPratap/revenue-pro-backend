@@ -42,6 +42,10 @@ function getEmptyResponse(): BoardResponse {
       costPerJobBooked: 0,
       costOfMarketingPercent: 0,
       estimateSetRate: 0,
+      holdRate: null,
+      costPerLinkClick: null,
+      averageJobSize: null,
+      resultRate: null,
     },
     availableZipCodes: [],
     availableServiceTypes: []
@@ -394,6 +398,7 @@ function createInitialAggregationRow(
     _totalVideoAvgWatchTime: 0,
     _totalVideoPlayActions: 0,
     _totalVideoContinuous2SecWatched: 0,
+    _totalVideoThruplayWatched: 0,
     _totalConversions: 0,
     _totalConversionValue: 0,
     _totalCostPerConversion: 0,
@@ -480,6 +485,7 @@ function aggregateAdMetrics(
     row._totalVideoAvgWatchTime = (row._totalVideoAvgWatchTime || 0) + (metrics.video_avg_watch_time || 0);
     row._totalVideoPlayActions = (row._totalVideoPlayActions || 0) + (metrics.video_play_actions || 0);
     row._totalVideoContinuous2SecWatched = (row._totalVideoContinuous2SecWatched || 0) + (metrics.video_continuous_2_sec_watched || 0);
+    row._totalVideoThruplayWatched = (row._totalVideoThruplayWatched || 0) + (metrics.video_thruplay_watched || 0);
     
     // Sum conversion metrics
     row._totalConversions = (row._totalConversions || 0) + (metrics.total_conversions || 0);
@@ -682,6 +688,20 @@ function calculateRowMetrics(aggregationMap: Map<string, BoardRow>): void {
     const seeMoreClicks = allClicks - linkClicks - postReactions - postComments - postShares;
     row.see_more_rate = totalImpressions > 0 ? Number(((seeMoreClicks / totalImpressions) * 100).toFixed(2)) : null;
     
+    // Hold Rate: (ThruPlays / Impressions) * 100
+    const videoThruplayWatched = row._totalVideoThruplayWatched || 0;
+    row.holdRate = totalImpressions > 0 ? Number(((videoThruplayWatched / totalImpressions) * 100).toFixed(2)) : null;
+    
+    // Cost per Link Click: spend / link_clicks
+    row.costPerLinkClick = linkClicks > 0 ? Number((totalSpend / linkClicks).toFixed(2)) : null;
+    
+    // Average Job Size: revenue / numberOfJobsBooked
+    row.averageJobSize = jobsBooked > 0 ? Number((totalRevenue / jobsBooked).toFixed(2)) : null;
+    
+    // Result Rate: (Conversions / Impressions) * 100
+    const totalConversions = row._totalConversions || 0;
+    row.resultRate = totalImpressions > 0 ? Number(((totalConversions / totalImpressions) * 100).toFixed(2)) : null;
+    
     // Convert service and zipCode sets to comma-separated strings
     row.service = row._services && row._services.size > 0 ? Array.from(row._services).sort().join(', ') : undefined;
     row.zipCode = row._zipCodes && row._zipCodes.size > 0 ? Array.from(row._zipCodes).sort().join(', ') : undefined;
@@ -778,6 +798,10 @@ function filterColumns(
     if (columns.thumbstop_rate) filteredRow.thumbstop_rate = row.thumbstop_rate;
     if (columns.conversion_rate) filteredRow.conversion_rate = row.conversion_rate;
     if (columns.see_more_rate) filteredRow.see_more_rate = row.see_more_rate;
+    if (columns.holdRate) filteredRow.holdRate = row.holdRate;
+    if (columns.costPerLinkClick) filteredRow.costPerLinkClick = row.costPerLinkClick;
+    if (columns.averageJobSize) filteredRow.averageJobSize = row.averageJobSize;
+    if (columns.resultRate) filteredRow.resultRate = row.resultRate;
 
     // Store internal fields for sorting
     (filteredRow as any)._totalSpend = row._totalSpend;
@@ -820,6 +844,8 @@ function calculateAverages(aggregationMap: Map<string, BoardRow>): BoardResponse
   let sumProposalPresented = 0;
   let sumJobLost = 0;
   let sumRevenue = 0;
+  let sumVideoThruplayWatched = 0;
+  let sumLinkClicks = 0;
 
   aggregationMap.forEach((row) => {
     sumSpend += row._totalSpend || 0;
@@ -838,6 +864,8 @@ function calculateAverages(aggregationMap: Map<string, BoardRow>): BoardResponse
     sumProposalPresented += row.numberOfProposalPresented || 0;
     sumJobLost += row.numberOfJobLost || 0;
     sumRevenue += row._totalRevenue || 0;
+    sumVideoThruplayWatched += row._totalVideoThruplayWatched || 0;
+    sumLinkClicks += row._totalLinkClicks || 0;
   });
 
   // Only include calculated averages (ratios/percentages), not sums
@@ -876,6 +904,10 @@ function calculateAverages(aggregationMap: Map<string, BoardRow>): BoardResponse
       });
       return totalNetEstimates > 0 ? Number((sumSpend / totalNetEstimates).toFixed(2)) : null;
     })(),
+    holdRate: sumImpressions > 0 ? Number(((sumVideoThruplayWatched / sumImpressions) * 100).toFixed(2)) : null,
+    costPerLinkClick: sumLinkClicks > 0 ? Number((sumSpend / sumLinkClicks).toFixed(2)) : null,
+    averageJobSize: sumJobsBooked > 0 ? Number((sumRevenue / sumJobsBooked).toFixed(2)) : null,
+    resultRate: sumImpressions > 0 ? Number(((sumTotalConversions / sumImpressions) * 100).toFixed(2)) : null,
   };
 }
 
