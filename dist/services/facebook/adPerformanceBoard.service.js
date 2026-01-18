@@ -112,22 +112,24 @@ function mapAnalyticsToEnrichedAds(savedAnalytics, creativesMap) {
                 primary_text: enrichedCreative?.primaryText || analytics.creative.primaryText || null,
                 headline: enrichedCreative?.headline || analytics.creative.headline || null,
                 raw: analytics.creative.raw || null,
-                // Add enriched creative data from creatives collection
+                // Add enriched creative data from creatives collection (new schema)
                 ...(enrichedCreative && {
                     thumbnailUrl: enrichedCreative.thumbnailUrl,
                     description: enrichedCreative.description,
                     body: enrichedCreative.body,
-                    // New schema fields
+                    // New schema fields (arrays)
                     imageUrls: enrichedCreative.imageUrls || [],
-                    videoUrls: enrichedCreative.videoUrls || [],
-                    videoIds: enrichedCreative.videoIds || [],
-                    previewIframe: enrichedCreative.previewIframe || [],
                     imageHashes: enrichedCreative.imageHashes || [],
+                    videoIds: enrichedCreative.videoIds || [],
+                    videoUrls: enrichedCreative.videoUrls || [],
+                    previewIframe: enrichedCreative.previewIframe || [],
+                    // Creative classification
                     creativeMode: enrichedCreative.creativeMode,
                     mediaType: enrichedCreative.mediaType,
+                    // Carousel and CTA
                     childAttachments: enrichedCreative.childAttachments || [],
                     callToAction: enrichedCreative.callToAction,
-                    // Legacy fields (for backward compatibility)
+                    // Legacy fields for backward compatibility (first item from arrays)
                     imageUrl: enrichedCreative.imageUrls?.[0],
                     imageHash: enrichedCreative.imageHashes?.[0],
                     videoId: enrichedCreative.videoIds?.[0],

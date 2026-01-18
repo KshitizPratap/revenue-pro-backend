@@ -153,19 +153,27 @@ function mapAnalyticsToEnrichedAds(
         primary_text: enrichedCreative?.primaryText || analytics.creative.primaryText || null,
         headline: enrichedCreative?.headline || analytics.creative.headline || null,
         raw: analytics.creative.raw || null,
-        // Add enriched creative data from creatives collection
+        // Add enriched creative data from creatives collection (new schema)
         ...(enrichedCreative && {
           thumbnailUrl: enrichedCreative.thumbnailUrl,
-          imageUrl: enrichedCreative.imageUrl,
-          imageHash: enrichedCreative.imageHash,
-          videoId: enrichedCreative.videoId,
-          creativeType: enrichedCreative.creativeType,
-          images: enrichedCreative.images,
-          videos: enrichedCreative.videos,
-          childAttachments: enrichedCreative.childAttachments,
-          callToAction: enrichedCreative.callToAction,
           description: enrichedCreative.description,
           body: enrichedCreative.body,
+          // New schema fields (arrays)
+          imageUrls: enrichedCreative.imageUrls || [],
+          imageHashes: enrichedCreative.imageHashes || [],
+          videoIds: enrichedCreative.videoIds || [],
+          videoUrls: enrichedCreative.videoUrls || [],
+          previewIframe: enrichedCreative.previewIframe || [],
+          // Creative classification
+          creativeMode: enrichedCreative.creativeMode,
+          mediaType: enrichedCreative.mediaType,
+          // Carousel and CTA
+          childAttachments: enrichedCreative.childAttachments || [],
+          callToAction: enrichedCreative.callToAction,
+          // Legacy fields for backward compatibility (first item from arrays)
+          imageUrl: enrichedCreative.imageUrls?.[0],
+          imageHash: enrichedCreative.imageHashes?.[0],
+          videoId: enrichedCreative.videoIds?.[0],
         })
       } : null,
       lead_form: analytics.leadForm ? {
