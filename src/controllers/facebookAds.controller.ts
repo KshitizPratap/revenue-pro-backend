@@ -300,6 +300,7 @@ export class FacebookAdsController {
         availableZipCodes: result.availableZipCodes,
         availableServiceTypes: result.availableServiceTypes,
         meta: {
+          clientId: clientId as string,
           totalRows: result.rows.length,
           groupBy,
           filters,

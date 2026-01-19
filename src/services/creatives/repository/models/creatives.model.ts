@@ -5,6 +5,7 @@ const creativesSchema = new Schema<ICreativeDocument>(
   {
     // Identity
     creativeId: { type: String, required: true, unique: true, index: true },
+    clientId: { type: String, required: true, index: true },
     adAccountId: { type: String, required: true, index: true },
     name: { type: String, default: null },
     
@@ -90,7 +91,9 @@ const creativesSchema = new Schema<ICreativeDocument>(
 );
 
 // Indexes for efficient queries
+creativesSchema.index({ clientId: 1, creativeId: 1 });
 creativesSchema.index({ adAccountId: 1, creativeId: 1 });
+creativesSchema.index({ clientId: 1, adAccountId: 1 });
 creativesSchema.index({ lastFetchedAt: 1 });
 
 const CreativeModel = model<ICreativeDocument>('Creative', creativesSchema);

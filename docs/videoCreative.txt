@@ -18,16 +18,16 @@ RESPONSE ->
       "title": "Get a Free Estimate Today!",
       "message": "My name is Dan and I own Zeuli Paint. I serve the St. Croix Valley and Woodbury areas and I’m incredibly honored to be part of these amazing communities. 
 
-Our clients tell us that they paint their homes because they want it to look fresher, feel healthier and be a representation of them instead of what the last homeowner or their builder chose.
+      Our clients tell us that they paint their homes because they want it to look fresher, feel healthier and be a representation of them instead of what the last homeowner or their builder chose.
 
-Right now is a great time to book your painting project as we’re currently offering up to 10% off on our painting services when you book this month. 
+      Right now is a great time to book your painting project as we’re currently offering up to 10% off on our painting services when you book this month. 
 
-Just click or tap 'Get Quote' to get started with your FREE quote today.
+      Just click or tap 'Get Quote' to get started with your FREE quote today.
 
-We are looking forward to working with you!
+      We are looking forward to working with you!
 
-Dan Zeuli
-Zeuli Paint",
+      Dan Zeuli
+      Zeuli Paint",
       "link_description": "Family owned, locally operated",
       "call_to_action": {
         "type": "GET_QUOTE",

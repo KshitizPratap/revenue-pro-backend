@@ -99,9 +99,10 @@ async function fetchAndEnrichCreatives(
               try {
                 const creative = await creativesService.getCreative(
                   creativeId,
+                  clientId,
                   credentials.adAccountId,
                   credentials.accessToken,
-                  false // Use cache if available, but we know it's not in DB
+                  false
                 );
                 
                 if (creative) {
@@ -170,10 +171,6 @@ function mapAnalyticsToEnrichedAds(
           // Carousel and CTA
           childAttachments: enrichedCreative.childAttachments || [],
           callToAction: enrichedCreative.callToAction,
-          // Legacy fields for backward compatibility (first item from arrays)
-          imageUrl: enrichedCreative.imageUrls?.[0],
-          imageHash: enrichedCreative.imageHashes?.[0],
-          videoId: enrichedCreative.videoIds?.[0],
         })
       } : null,
       lead_form: analytics.leadForm ? {
