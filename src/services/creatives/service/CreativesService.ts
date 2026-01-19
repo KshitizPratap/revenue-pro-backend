@@ -59,10 +59,8 @@ export class CreativesService {
   ): Promise<Array<{ url: string; hash: string; width: number | null; height: number | null }>> {
     if (!imageHashes || imageHashes.length === 0) return [];
 
-    try {
-      const accountId = adAccountId.replace('act_', '');
-      
-      const response = await fbGet(`/${accountId}/adimages`, {
+    try {      
+      const response = await fbGet(`/${adAccountId}/adimages`, {
         hashes: JSON.stringify(imageHashes),
         fields: 'hash,url,url_128,permalink_url,width,height'
       }, accessToken);
@@ -434,14 +432,14 @@ export class CreativesService {
       return result;
     }
         
-        const imagesWithUrls = assetFeedSpec.images
-          .filter((img: any) => img.url && img.hash)
-          .map((img: any) => ({
-            url: img.url,
-            hash: img.hash,
-            width: img.width ?? undefined,
-            height: img.height ?? undefined
-          }));
+    const imagesWithUrls = assetFeedSpec.images
+      .filter((img: any) => img.url && img.hash)
+      .map((img: any) => ({
+        url: img.url,
+        hash: img.hash,
+        width: img.width ?? undefined,
+        height: img.height ?? undefined
+      }));
         
     const hashesNeedingFetch = assetFeedSpec.images
           .filter((img: any) => img.hash && !img.url)
@@ -535,8 +533,7 @@ export class CreativesService {
     creativeData: any,
     assetFeedData: { primaryText: string | null; headline: string | null; description: string | null },
     linkData: any,
-    videoData: any,
-    photoData: any
+    videoData: any
   ): {
     primaryText: string | null;
     headline: string | null;
@@ -544,7 +541,7 @@ export class CreativesService {
     body: string | null;
   } {
     return {
-      primaryText: assetFeedData.primaryText || creativeData.body || linkData.message || photoData.message || videoData.message || null,
+      primaryText: assetFeedData.primaryText || creativeData.body || linkData.message || videoData.message || null,
       headline: assetFeedData.headline || creativeData.title || linkData.name || null,
       description: assetFeedData.description || linkData.description || null,
       body: assetFeedData.primaryText || creativeData.body || null
@@ -561,6 +558,12 @@ export class CreativesService {
     accessToken: string
   ): Promise<Partial<ICreative>> {
     let previewIframes: string[] = [];
+    let imageUrls = new Set<string>();
+    let imageHashes = new Set<string>();
+    let videoUrls = new Set<string>();
+    let videoIds = new Set<string>();
+    let thumbnailUrl: string | null = creativeData.thumbnail_url || null;
+
     try {
       const previewIframe = await this.fetchVideoPreviewIframe(creativeData.id, accessToken);
       if (previewIframe) {
@@ -572,7 +575,6 @@ export class CreativesService {
     
     const oss = creativeData.object_story_spec || {};
     const linkData = oss.link_data || {};
-    const photoData = oss.photo_data || {};
     const videoData = oss.video_data || {};
     const assetFeedSpec = creativeData.asset_feed_spec || {};
     
@@ -581,46 +583,39 @@ export class CreativesService {
     
     const childAttachments = this.extractChildAttachments(linkData);
     const assetFeedData = this.extractAssetFeedData(assetFeedSpec);
-    const contentFields = this.extractContentFields(creativeData, assetFeedData, linkData, videoData, photoData);
+    const contentFields = this.extractContentFields(creativeData, assetFeedData, linkData, videoData);
       
     const topLevelVideoId = creativeData.video_id || null;
     const videoId = videoData.video_id || topLevelVideoId || null;
-    const imageUrl = creativeData.image_url || null;
-    const imageHash = creativeData.image_hash || photoData.image_hash || assetFeedData.imageHash || null;
-      
-    let imageUrls: string[] = [];
-    let imageHashes: string[] = [];
-    let videoUrls: string[] = [];
-    let videoIds: string[] = [];
-    let thumbnailUrl: string | null = creativeData.thumbnail_url || null;
+    const imageUrl = creativeData.image_url || videoData.image_url || null;
+    const imageHash = linkData.image_hash || videoData.image_hash || assetFeedData.imageHash || null;
+
+    imageUrls.add(imageUrl);
+    imageHashes.add(imageHash);
+    videoIds.add(videoId);
       
     if (creativeMode === 'DYNAMIC_ASSET_FEED') {
       if (assetFeedSpec.images && Array.isArray(assetFeedSpec.images) && assetFeedSpec.images.length > 0) {
         const dynamicEnrichment = await this.enrichDynamicImages(assetFeedSpec, adAccountId, accessToken);
-        imageUrls.push(...dynamicEnrichment.imageUrls);
-        imageHashes.push(...dynamicEnrichment.imageHashes);
+        dynamicEnrichment.imageUrls.forEach(url => imageUrls.add(url));
+        dynamicEnrichment.imageHashes.forEach(hash => imageHashes.add(hash));
       }
     }
     else if (creativeMode === 'STATIC') {
       if (videoId) {
         const videoEnrichment = await this.enrichVideoMedia(videoId, creativeData.id, accessToken);
-        videoUrls.push(...videoEnrichment.videoUrls);
-        videoIds.push(...videoEnrichment.videoIds);
+        videoEnrichment.videoUrls.forEach(url => videoUrls.add(url));
+        videoEnrichment.videoIds.forEach(id => videoIds.add(id));
         previewIframes.push(...videoEnrichment.previewIframes);
       }
       else if (imageUrl) {
-        imageUrls.push(imageUrl);
-        
-        if (imageHash) {
-          imageHashes.push(imageHash);
-        }
+        console.log('imageUrl', imageUrl);
       }
       else if (imageHash) {
-        imageHashes.push(imageHash);
         try {
           const imageData = await this.fetchImageUrlFromHash(imageHash, adAccountId, accessToken);
           if (imageData.url) {
-            imageUrls.push(imageData.url);
+            imageUrls.add(imageData.url);
           }
         } catch (error: any) {
           console.error(`[Creatives] Failed to fetch image from hash ${imageHash}:`, error.message);
@@ -629,16 +624,16 @@ export class CreativesService {
     }
     else if (creativeMode === 'STATIC_CAROUSEL' && childAttachments.length > 0) {
       const carouselEnrichment = await this.enrichCarouselImages(childAttachments, adAccountId, accessToken);
-      imageUrls.push(...carouselEnrichment.imageUrls);
-      imageHashes.push(...carouselEnrichment.imageHashes);
+      carouselEnrichment.imageUrls.forEach(url => imageUrls.add(url));
+      carouselEnrichment.imageHashes.forEach(hash => imageHashes.add(hash));
     }
     
-    if (imageUrls.length === 0 && imageHash && !imageHashes.includes(imageHash)) {
+    if (imageUrls.size === 0 && imageHash && !imageHashes.has(imageHash)) {
       try {
         const imageData = await this.fetchImageUrlFromHash(imageHash, adAccountId, accessToken);
         if (imageData.url) {
-          imageUrls.push(imageData.url);
-          imageHashes.push(imageHash);
+          imageUrls.add(imageData.url);
+          imageHashes.add(imageHash);
         }
       } catch (error: any) {
         console.error(`[Creatives] Failed to fetch image from hash ${imageHash}:`, error.message);
@@ -673,10 +668,10 @@ export class CreativesService {
       callToAction,
       creativeMode,
       mediaType,
-      imageHashes,
-      imageUrls,
-      videoIds,
-      videoUrls,
+      imageHashes: Array.from(imageHashes),
+      imageUrls: Array.from(imageUrls),
+      videoIds: Array.from(videoIds),
+      videoUrls: Array.from(videoUrls),
       previewIframe: previewIframes,
       objectStorySpec: oss,
       rawData: creativeData,
