@@ -549,22 +549,22 @@ export class CreativesService {
     const imageUrl = creativeData.image_url || videoData.image_url || null;
     const imageHash = linkData.image_hash || videoData.image_hash || assetFeedData.imageHash || null;
 
-    imageUrls.add(imageUrl);
-    imageHashes.add(imageHash);
-    videoIds.add(videoId);
+    if (imageUrl) imageUrls.add(imageUrl);
+    if (imageHash) imageHashes.add(imageHash);
+    if (videoId) videoIds.add(videoId);
       
     if (creativeMode === 'DYNAMIC_ASSET_FEED') {
       if (assetFeedSpec.images && Array.isArray(assetFeedSpec.images) && assetFeedSpec.images.length > 0) {
         const dynamicEnrichment = await this.enrichDynamicImages(assetFeedSpec, adAccountId, accessToken);
-        dynamicEnrichment.imageUrls.forEach(url => imageUrls.add(url));
-        dynamicEnrichment.imageHashes.forEach(hash => imageHashes.add(hash));
+        dynamicEnrichment.imageUrls.forEach(url => url && imageUrls.add(url));
+        dynamicEnrichment.imageHashes.forEach(hash => hash && imageHashes.add(hash));
       }
     }
     else if (creativeMode === 'STATIC') {
       if (videoId) {
         const videoEnrichment = await this.enrichVideoMedia(videoId, creativeData.id, accessToken);
-        videoEnrichment.videoUrls.forEach(url => videoUrls.add(url));
-        videoEnrichment.videoIds.forEach(id => videoIds.add(id));
+        videoEnrichment.videoUrls.forEach(url => url && videoUrls.add(url));
+        videoEnrichment.videoIds.forEach(id => id && videoIds.add(id));
         previewIframes.push(...videoEnrichment.previewIframes);
       }
       else if (imageUrl) {
@@ -583,8 +583,8 @@ export class CreativesService {
     }
     else if (creativeMode === 'STATIC_CAROUSEL' && childAttachments.length > 0) {
       const carouselEnrichment = await this.enrichCarouselImages(childAttachments, adAccountId, accessToken);
-      carouselEnrichment.imageUrls.forEach(url => imageUrls.add(url));
-      carouselEnrichment.imageHashes.forEach(hash => imageHashes.add(hash));
+      carouselEnrichment.imageUrls.forEach(url => url && imageUrls.add(url));
+      carouselEnrichment.imageHashes.forEach(hash => hash && imageHashes.add(hash));
     }
     
     if (imageUrls.size === 0 && imageHash && !imageHashes.has(imageHash)) {

@@ -99,9 +99,10 @@ async function fetchAndEnrichCreatives(
               try {
                 const creative = await creativesService.getCreative(
                   creativeId,
+                  clientId,
                   credentials.adAccountId,
                   credentials.accessToken,
-                  false // Use cache if available, but we know it's not in DB
+                  false
                 );
                 
                 if (creative) {
