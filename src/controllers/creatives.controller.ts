@@ -164,6 +164,7 @@ export class CreativesController {
       // Get creative (from cache or fetch from Facebook)
       const creative = await creativesService.getCreative(
         creativeId,
+        clientId,
         fbAdAccountId,
         accessToken
       );

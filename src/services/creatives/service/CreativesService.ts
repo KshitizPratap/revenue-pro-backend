@@ -313,48 +313,6 @@ export class CreativesService {
   }
 
   /**
-   * Enrich single image media
-   */
-  private async enrichImageMedia(
-    imageUrl: string | null,
-    imageHash: string | null,
-    adAccountId: string,
-    accessToken: string
-  ): Promise<{
-    imageUrl: string | null;
-    imageUrls: string[];
-    imageHashes: string[];
-  }> {
-    const result = {
-      imageUrl: imageUrl || null,
-      imageUrls: [] as string[],
-      imageHashes: [] as string[]
-    };
-
-    if (imageUrl) {
-      result.imageUrls.push(imageUrl);
-    }
-
-    if (imageHash) {
-      result.imageHashes.push(imageHash);
-      
-      if (!imageUrl) {
-        try {
-          const imageData = await this.fetchImageUrlFromHash(imageHash, adAccountId, accessToken);
-          if (imageData.url) {
-            result.imageUrl = imageData.url;
-            result.imageUrls.push(imageData.url);
-          }
-        } catch (error: any) {
-          console.error(`[Creatives] Error fetching image from hash ${imageHash}:`, error.message);
-        }
-      }
-    }
-
-    return result;
-  }
-
-  /**
    * Enrich carousel images - batch fetches from child_attachments hashes
    */
   private async enrichCarouselImages(
@@ -554,6 +512,7 @@ export class CreativesService {
    */
   private async parseCreativeData(
     creativeData: any, 
+    clientId: string,
     adAccountId: string, 
     accessToken: string
   ): Promise<Partial<ICreative>> {
@@ -657,6 +616,7 @@ export class CreativesService {
 
     return {
       creativeId: creativeData.id,
+      clientId,
       adAccountId,
       name: creativeData.name || null,
       primaryText: contentFields.primaryText,
@@ -684,6 +644,7 @@ export class CreativesService {
    */
   async getCreative(
     creativeId: string,
+    clientId: string,
     adAccountId: string,
     accessToken: string,
     forceRefresh: boolean = false
@@ -702,7 +663,7 @@ export class CreativesService {
 
     try {
       const creativeData = await this.fetchCreativeFromFacebook(creativeId, accessToken);
-      const parsedCreative = await this.parseCreativeData(creativeData, adAccountId, accessToken);
+      const parsedCreative = await this.parseCreativeData(creativeData, clientId, adAccountId, accessToken);
       const updated = await creativesRepository.upsertCreative(parsedCreative);
       return updated;
     } catch (error: any) {
@@ -710,56 +671,6 @@ export class CreativesService {
       const cached = await creativesRepository.getCreativeById(creativeId);
       return cached || null;
     }
-  }
-
-  /**
-   * Batch get creatives
-   */
-  private async getCreatives(
-    creativeIds: string[],
-    adAccountId: string,
-    accessToken: string
-  ): Promise<Record<string, ICreative>> {
-    if (!creativeIds || creativeIds.length === 0) return {};
-
-    const uniqueIds = Array.from(new Set(creativeIds.filter(id => id)));
-
-    const cached = await creativesRepository.getCreativesByIds(uniqueIds);
-    const cachedMap: Record<string, ICreative> = {};
-    const now = Date.now();
-    
-    cached.forEach(c => {
-      const daysSinceUpdate = (now - new Date(c.lastFetchedAt).getTime()) / (1000 * 60 * 60 * 24);
-      if (daysSinceUpdate < 7) {
-        cachedMap[c.creativeId] = c;
-      }
-    });
-
-    const toFetch = uniqueIds.filter(id => !cachedMap[id]);
-
-    if (toFetch.length === 0) {
-      return cachedMap;
-    }
-
-    const BATCH_SIZE = 10;
-    for (let i = 0; i < toFetch.length; i += BATCH_SIZE) {
-      const batch = toFetch.slice(i, i + BATCH_SIZE);
-      
-      await Promise.all(
-        batch.map(async (creativeId) => {
-          try {
-            const creative = await this.getCreative(creativeId, adAccountId, accessToken, true);
-            if (creative) {
-              cachedMap[creativeId] = creative;
-            }
-          } catch (error: any) {
-            console.error(`[Creatives] Failed to fetch creative ${creativeId}:`, error.message || error);
-          }
-        })
-      );
-    }
-
-    return cachedMap;
   }
 
   /**
@@ -773,9 +684,10 @@ export class CreativesService {
   ): Promise<ICreative | null> {
     const existing = await creativesRepository.getCreativeById(creativeId);
     if (!existing) {
-      return this.getCreative(creativeId, adAccountId, accessToken, true);
+      throw new Error(`Creative ${creativeId} not found. Cannot refresh without clientId.`);
     }
 
+    const clientId = existing.clientId;
     const creativeMode = existing.creativeMode;
     const mediaType = existing.mediaType;
 
@@ -801,7 +713,7 @@ export class CreativesService {
           }
         }
         
-        return this.getCreative(creativeId, adAccountId, accessToken, true);
+        return this.getCreative(creativeId, clientId, adAccountId, accessToken, true);
       }
 
       if (creativeMode === 'STATIC_CAROUSEL') {
@@ -810,7 +722,7 @@ export class CreativesService {
           : [];
 
           if (imageHashes.length === 0) {
-            return this.getCreative(creativeId, adAccountId, accessToken, true);
+            return this.getCreative(creativeId, clientId, adAccountId, accessToken, true);
           }
 
           const imageUrls = await this.fetchImageUrlsFromHashes(imageHashes, adAccountId, accessToken);
@@ -831,7 +743,7 @@ export class CreativesService {
       if (mediaType === 'VIDEO' || mediaType === 'MIXED') {
         const videoId = existing.videoIds.length > 0 ? existing.videoIds[0] : null;
         if (!videoId) {
-            return this.getCreative(creativeId, adAccountId, accessToken, true);
+            return this.getCreative(creativeId, clientId, adAccountId, accessToken, true);
           }
 
         const videoEnrichment = await this.enrichVideoMedia(videoId, creativeId, accessToken);
@@ -851,11 +763,11 @@ export class CreativesService {
           }
       }
 
-      return this.getCreative(creativeId, adAccountId, accessToken, true);
+      return this.getCreative(creativeId, clientId, adAccountId, accessToken, true);
 
     } catch (error: any) {
       console.error(`[Creatives] Error in smart refresh:`, error.message);
-      return this.getCreative(creativeId, adAccountId, accessToken, true);
+      return this.getCreative(creativeId, clientId, adAccountId, accessToken, true);
     }
   }
 
@@ -897,7 +809,7 @@ export class CreativesService {
       await Promise.all(
         batch.map(async (creativeId) => {
           try {
-            await this.getCreative(creativeId, adAccountId, accessToken, true);
+            await this.getCreative(creativeId, clientId, adAccountId, accessToken, true);
             saved++;
           } catch (error: any) {
             console.error(`[Creatives] Failed to fetch creative ${creativeId}:`, error.message || error);

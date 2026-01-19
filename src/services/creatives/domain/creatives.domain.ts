@@ -3,6 +3,7 @@ import { Document } from "mongoose";
 export interface ICreative {
   // Identity
   creativeId: string;
+  clientId: string;
   adAccountId: string;
   name: string | null;
   
