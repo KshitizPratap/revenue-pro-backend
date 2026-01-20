@@ -673,6 +673,9 @@ function calculateRowMetrics(aggregationMap: Map<string, BoardRow>): void {
       unqualified: unqualifiedLeads
     });
     
+    // Update numberOfEstimateSets to include all estimate set statuses (not just estimate_set)
+    row.numberOfEstimateSets = netEstimates;
+    
     row.costPerEstimateSet = netEstimates > 0 ? Number((totalSpend / netEstimates).toFixed(2)) : null;
     row.estimateSetRate = calculateEstimateSetRate(netEstimates, netUnqualifieds);
     row.revenue = Number(totalRevenue.toFixed(2));
@@ -887,26 +890,14 @@ function calculateAverages(aggregationMap: Map<string, BoardRow>): BoardResponse
     costPerJobBooked: sumJobsBooked > 0 ? Number((sumSpend / sumJobsBooked).toFixed(2)) : null,
     costOfMarketingPercent: sumRevenue > 0 ? Number(((sumSpend / sumRevenue) * 100).toFixed(2)) : null,
     estimateSetRate: (() => {
-      const totalNetEstimates = calculateEstimateSetCount({
-        estimate_set: sumEstimateSets,
-        virtual_quote: sumVirtualQuotes,
-        proposal_presented: sumProposalPresented,
-        job_booked: sumJobsBooked,
-        estimate_canceled: sumEstimateCanceled,
-        job_lost: sumJobLost
-      });
+      // sumEstimateSets already includes all estimate set statuses (updated in calculateRowMetrics)
+      const totalNetEstimates = sumEstimateSets;
       const totalNetUnqualifieds = calculateUnqualifiedCount({ unqualified: sumUnqualifiedLeads });
       return calculateEstimateSetRate(totalNetEstimates, totalNetUnqualifieds);
     })(),
     costPerEstimateSet: (() => {
-      const totalNetEstimates = calculateEstimateSetCount({
-        estimate_set: sumEstimateSets,
-        virtual_quote: sumVirtualQuotes,
-        proposal_presented: sumProposalPresented,
-        job_booked: sumJobsBooked,
-        estimate_canceled: sumEstimateCanceled,
-        job_lost: sumJobLost
-      });
+      // sumEstimateSets already includes all estimate set statuses (updated in calculateRowMetrics)
+      const totalNetEstimates = sumEstimateSets;
       return totalNetEstimates > 0 ? Number((sumSpend / totalNetEstimates).toFixed(2)) : null;
     })(),
     holdRate: sumImpressions > 0 ? Number(((sumVideoThruplayWatched / sumImpressions) * 100).toFixed(2)) : null,
